@@ -611,6 +611,70 @@ function rvPagesPaintGrid(el,markup){
  for(const pic of t.content.querySelectorAll('.rv-art[data-art-key]')){const existing=old.get(pic.dataset.artKey)?.shift();if(existing&&existing.className===pic.className)pic.replaceWith(existing)}
  el.replaceChildren(t.content)
 }
+const RV_PAGES_ENCODER_SOURCE="\nlet encoder=null,failed=false\nself.onmessage=async({data:blob})=>{\n let bitmap\n try{\n  bitmap=await createImageBitmap(blob)\n  if(!bitmap.width||!bitmap.height||bitmap.width*bitmap.height>40000000)throw Error('dimensions')\n  const scale=Math.min(1,480/Math.max(bitmap.width,bitmap.height))\n  const canvas=new OffscreenCanvas(Math.max(1,Math.round(bitmap.width*scale)),Math.max(1,Math.round(bitmap.height*scale)))\n  const ctx=canvas.getContext('2d',{willReadFrequently:true})\n  ctx.drawImage(bitmap,0,0,canvas.width,canvas.height)\n  let result=null\n  if(!failed){\n   try{\n    if(!encoder)encoder=import('https://cdn.jsdelivr.net/npm/@jsquash/avif@2.1.1/encode.js/+esm').then(async m=>{await m.init();return m.default})\n    const encode=await encoder\n    const bytes=await encode(ctx.getImageData(0,0,canvas.width,canvas.height),{quality:60,speed:8})\n    if(bytes.byteLength)result=new Blob([bytes],{type:'image/avif'})\n   }catch{failed=true}\n  }\n  if(!result)result=await canvas.convertToBlob({type:'image/webp',quality:0.78})\n  self.postMessage(result&&['image/avif','image/webp'].includes(result.type)&&result.size<blob.size*0.95?result:null)\n }catch{self.postMessage(null)}finally{bitmap?.close()}\n}\n"
+
+const rvPagesCompress={queue:[],keys:new Set(),bytes:0,active:false,worker:null,workerURL:null,disabled:false}
+function rvPagesEncode(blob){
+ return new Promise(resolve=>{
+  if(rvPagesCompress.disabled||typeof Worker==='undefined'){resolve(null);return}
+  let worker
+  try{
+   if(!rvPagesCompress.worker){
+    rvPagesCompress.workerURL ||= URL.createObjectURL(new Blob([RV_PAGES_ENCODER_SOURCE],{type:'text/javascript'}))
+    rvPagesCompress.worker=new Worker(rvPagesCompress.workerURL,{type:'module'})
+   }
+   worker=rvPagesCompress.worker
+  }catch{rvPagesCompress.disabled=true;resolve(null);return}
+  let done=false
+  const finish=(result,failed=false)=>{
+   if(done)return
+   done=true;clearTimeout(timer);worker.onmessage=worker.onerror=null
+   if(failed){worker.terminate();rvPagesCompress.worker=null;rvPagesCompress.disabled=true}
+   resolve(result instanceof Blob?result:null)
+  }
+  const timer=setTimeout(()=>finish(null,true),25000)
+  worker.onmessage=e=>finish(e.data)
+  worker.onerror=()=>finish(null,true)
+  try{worker.postMessage(blob)}catch{finish(null,true)}
+ })
+}
+function rvPagesCompressQueue(url,blob,cache,generation){
+ if(rvPagesCompress.disabled||!rvPages.limit||!cache||!/^image\/(png|jpeg|webp)$/.test(blob.type)||blob.size<12000||rvPagesCompress.keys.has(url)||rvPagesCompress.queue.length>=48||rvPagesCompress.bytes+blob.size>24000000)return
+ rvPagesCompress.keys.add(url);rvPagesCompress.queue.push({url,blob,cache,generation});rvPagesCompress.bytes+=blob.size
+ rvPagesCompressPump()
+}
+function rvPagesCompressPump(){
+ if(rvPagesCompress.active||!rvPagesCompress.queue.length)return
+ rvPagesCompress.active=true
+ const run=async()=>{
+  const job=rvPagesCompress.queue.shift()
+  if(!job){rvPagesCompress.active=false;return}
+  const {url,blob,cache,generation}=job
+  try{
+   if(generation!==rvPages.cacheGeneration||!rvPages.limit||rvPagesCompress.disabled)return
+   const result=await rvPagesEncode(blob)
+   if(rvPagesCompress.disabled)return
+   rvPages.eviction=rvPages.eviction.catch(()=>{}).then(async()=>{
+    if(generation!==rvPages.cacheGeneration||!rvPages.limit)return
+    await rvPagesAccount(cache)
+    const old=await cache.match(url)
+    if(!old||old.headers.get('x-rv-optimized'))return
+    const stored=result&&result.size<blob.size*0.95?result:blob
+    await cache.put(url,new Response(stored,{headers:{'content-type':stored.type,'x-rv-size':String(stored.size),'x-rv-original-size':String(blob.size),'x-rv-optimized':'1'}}))
+    rvPages.bytes+=stored.size-(rvPages.cacheRows.get(url)||0)
+    rvPages.cacheRows.set(url,stored.size)
+    await rvPagesTrim(cache)
+   }).catch(()=>{})
+   await rvPages.eviction
+  }catch{}finally{
+   rvPagesCompress.keys.delete(url);rvPagesCompress.bytes-=blob.size;rvPagesCompress.active=false
+   rvPagesCompressPump()
+  }
+ }
+ if(typeof requestIdleCallback==='function')requestIdleCallback(()=>run(),{timeout:1800})
+ else setTimeout(run,120)
+}
+
 async function rvPagesMedia(url){
  if(!url||rvPages.missing.has(url))return null
  const mem=rvPagesMemory(url);if(mem)return mem.blob
@@ -621,7 +685,7 @@ async function rvPagesMedia(url){
  let generation=rvPages.cacheGeneration
  const task=(async()=>{
   let cache
-  try{if(rvPages.limit&&'caches'in window){cache=await caches.open(rvPages.cacheName);let hit=await cache.match(url);if(hit){if(rvPages.cacheRows?.has(url)){let n=rvPages.cacheRows.get(url);rvPages.cacheRows.delete(url);rvPages.cacheRows.set(url,n)}let blob=await hit.blob();if(blob.size){rvPagesRemember(url,blob);return blob}}}}catch{}
+  try{if(rvPages.limit&&'caches'in window){cache=await caches.open(rvPages.cacheName);let hit=await cache.match(url);if(hit){if(rvPages.cacheRows?.has(url)){let n=rvPages.cacheRows.get(url);rvPages.cacheRows.delete(url);rvPages.cacheRows.set(url,n)}let blob=await hit.blob();if(blob.size){rvPagesRemember(url,blob);if(external&&!hit.headers.get('x-rv-optimized'))rvPagesCompressQueue(url,blob,cache,generation);return blob}}}}catch{}
   const controller=new AbortController(),timer=setTimeout(()=>controller.abort(),6000)
   try{
    const r=await fetch(url,{credentials:external?'omit':'same-origin',referrerPolicy:'no-referrer',cache:'default',signal:controller.signal})
@@ -630,7 +694,7 @@ async function rvPagesMedia(url){
    if(!/^image\/(avif|webp|png|jpeg)$/.test(type))return null
    const blob=await r.blob();if(!blob.size||blob.size>5000000)return null
    rvPagesRemember(url,blob)
-   if(cache&&blob.size<=rvPages.limit){rvPages.eviction=rvPages.eviction.catch(()=>{}).then(async()=>{try{if(rvPages.limit&&generation===rvPages.cacheGeneration){await rvPagesAccount(cache);await cache.put(url,new Response(blob,{headers:{'content-type':blob.type||type,'x-rv-size':String(blob.size)}}));rvPages.bytes-=rvPages.cacheRows.get(url)||0;rvPages.cacheRows.delete(url);rvPages.cacheRows.set(url,blob.size);rvPages.bytes+=blob.size;await rvPagesTrim(cache)}}catch{}})}
+   if(cache&&blob.size<=rvPages.limit){rvPages.eviction=rvPages.eviction.catch(()=>{}).then(async()=>{try{if(rvPages.limit&&generation===rvPages.cacheGeneration){await rvPagesAccount(cache);await cache.put(url,new Response(blob,{headers:{'content-type':blob.type||type,'x-rv-size':String(blob.size)}}));rvPages.bytes-=rvPages.cacheRows.get(url)||0;rvPages.cacheRows.delete(url);rvPages.cacheRows.set(url,blob.size);rvPages.bytes+=blob.size;await rvPagesTrim(cache);if(external)rvPagesCompressQueue(url,blob,cache,generation)}}catch{}})}
    return blob
   }catch(e){if(external&&e instanceof TypeError)rvPages.blocked.add(url);return null}finally{clearTimeout(timer)}
  })()
@@ -767,7 +831,7 @@ async function rvPagesCacheInfo(){let e=$('rv-pages-usage');if(!e)return;try{let
 function rvPagesSetRemote(on){rvPages.remote=!!on;try{localStorage.setItem('rv-pages-remote-art',on?'1':'0')}catch{};if(!on){rvPages.direct.clear();for(const [url,r] of rvPages.media){if(new URL(url).origin!==location.origin){URL.revokeObjectURL(r.display);rvPages.memoryBytes-=r.blob.size;rvPages.media.delete(url)}}}}
 async function rvPagesSetLimit(n){rvPages.limit=Number(n)*1000000;try{localStorage.setItem('rv-pages-cache-limit',n);if(!rvPages.limit){rvPages.cacheGeneration++;await rvPages.eviction;await caches.delete(rvPages.cacheName);rvPages.cacheRows=null;rvPages.bytes=0}else{rvPages.eviction=rvPages.eviction.catch(()=>{}).then(async()=>rvPagesTrim(await caches.open(rvPages.cacheName)));await rvPages.eviction}}catch{}rvPagesCacheInfo()}
 artReset=async function(){if(confirm('Vider seulement les images du catalogue ?')){rvPages.cacheGeneration++;await rvPages.eviction;await caches.delete(rvPages.cacheName);rvPages.cacheRows=null;rvPages.bytes=0;rvPages.missing.clear();rvPages.blocked.clear();rvPages.direct.clear();for(const r of rvPages.media.values())URL.revokeObjectURL(r.display);rvPages.media.clear();rvPages.preview.clear();rvPages.memoryBytes=0;rvPagesCacheInfo()}}
-settings=function(){$('main').innerHTML=`<h2>Réglages</h2><div class="panel"><h3>Cache des images</h3><p>Les images référencées sont lues depuis le cache avant tout téléchargement. Aucun catalogue permanent sur cet appareil.</p><label>Limite du cache<select onchange="rvPagesSetLimit(this.value)">${[0,50,100,250,500].map(n=>`<option value="${n}" ${n*1000000===rvPages.limit?'selected':''}>${n} Mo</option>`).join('')}</select></label><label><input type="checkbox" onchange="rvPagesSetRemote(this.checked)" ${rvPages.remote?'checked':''}> Afficher les miniatures Libretro et LaunchBox (cache local prioritaire)</label><p><a href="data/report.json" target="_blank" rel="noopener">Statistiques du site et taille des fichiers</a></p><p><a href="credits.html" target="_blank" rel="noopener">Sources et licences des images hébergées</a></p><p id="rv-pages-usage">Mesure…</p><button onclick="artReset()">Vider le cache images</button></div><div class="panel"><h3>Collection privée</h3><p>Le JSON et les photos originales restent sur cet appareil. Aucun transfert automatique vers GitHub.</p><button class="primary" onclick="exportData()">Exporter la collection</button><hr><label>Importer une sauvegarde JSON<input type="file" accept="application/json,.json" onchange="importData(event)"></label><small>Remplacement après confirmation.</small><hr><label>Ajouter les fiches d’un JSON<input type="file" accept="application/json,.json" onchange="mergeData(event)"></label></div><p class="muted">RetroVault Pages 11.4 · couverture des images</p>`;rvPagesCacheInfo()}
+settings=function(){$('main').innerHTML=`<h2>Réglages</h2><div class="panel"><h3>Cache des images</h3><p>Les images référencées sont lues depuis le cache avant tout téléchargement. Les miniatures des jeux sont optimisées en AVIF (480 px maximum, qualité 60), ou en WebP si nécessaire. La compression est effectuée après affichage et seulement si le fichier devient plus léger. Aucun catalogue permanent sur cet appareil.</p><label>Limite du cache<select onchange="rvPagesSetLimit(this.value)">${[0,50,100,250,500].map(n=>`<option value="${n}" ${n*1000000===rvPages.limit?'selected':''}>${n} Mo</option>`).join('')}</select></label><label><input type="checkbox" onchange="rvPagesSetRemote(this.checked)" ${rvPages.remote?'checked':''}> Afficher les miniatures Libretro et LaunchBox (cache local prioritaire)</label><p><a href="data/report.json" target="_blank" rel="noopener">Statistiques du site et taille des fichiers</a></p><p><a href="credits.html" target="_blank" rel="noopener">Sources et licences des images hébergées</a></p><p id="rv-pages-usage">Mesure…</p><button onclick="artReset()">Vider le cache images</button></div><div class="panel"><h3>Collection privée</h3><p>Le JSON et les photos originales restent sur cet appareil. Aucun transfert automatique vers GitHub.</p><button class="primary" onclick="exportData()">Exporter la collection</button><hr><label>Importer une sauvegarde JSON<input type="file" accept="application/json,.json" onchange="importData(event)"></label><small>Remplacement après confirmation.</small><hr><label>Ajouter les fiches d’un JSON<input type="file" accept="application/json,.json" onchange="mergeData(event)"></label></div><p class="muted">RetroVault Pages 11.5 · cache AVIF</p>`;rvPagesCacheInfo()}
 // Preserve original compressed photo bytes: no lossy recoding or downscaling.
 toPhoto=async function(f){if(f.size>20*1024*1024||!['image/jpeg','image/png','image/webp'].includes(f.type))throw Error('Format ou taille non accepté');let u=URL.createObjectURL(f);try{let im=new Image();im.src=u;await im.decode();if(im.width*im.height>40000000)throw Error('Image trop grande');return await new Promise((resolve,reject)=>{let r=new FileReader();r.onload=()=>resolve(r.result);r.onerror=()=>reject(r.error);r.readAsDataURL(f)})}finally{URL.revokeObjectURL(u)}}
 rotatedPhoto=async function(photo,degrees){let im=new Image();im.src=photo;await im.decode();let c=document.createElement('canvas');c.width=im.height;c.height=im.width;let ctx=c.getContext('2d');ctx.translate(c.width/2,c.height/2);ctx.rotate(degrees*Math.PI/180);ctx.drawImage(im,-im.width/2,-im.height/2);let out=c.toDataURL('image/png');if(out.length>28000000)throw Error('Image tournée trop volumineuse');return out}
