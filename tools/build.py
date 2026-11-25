@@ -132,48 +132,7 @@ def fetch_public_hardware(out, platforms, images):
         photo=p.get('photo')
         name=p.get('name')
         if not valid(photo) or not valid(name): continue
-        if not re.search(r'\.(?:png|jpe?g|webp)
-    p=argparse.ArgumentParser();p.add_argument('--output',type=Path,default=ROOT/'dist');p.add_argument('--fetch',action='store_true');p.add_argument('--launchbox',type=Path);p.add_argument('--media-manifest',type=Path,default=ROOT/'tools'/'approved-images.json');args=p.parse_args()
-    out=args.output.resolve();out.mkdir(parents=True,exist_ok=True);(out/'media').mkdir(exist_ok=True)
-    html=(ROOT/'index.html').read_text(encoding='utf-8'); platforms=extract_array(html,'const explorePlatforms='); offline=extract_array(html,'const offlineCatalog=')
-    merged=defaultdict(set); count=0
-    for p in platforms:
-        if p.get('system'):
-            for n in p.get('seeds',[]):
-                if valid(n): merged[p['system']].add(n);count+=1
-    for sys,names in offline.items():
-        for n in names:
-            if valid(n): merged[sys].add(n);count+=1
-    failed=[]; succeeded=0
-    if args.fetch:
-        paths=read_json(ROOT/'tools/catalog_paths.json')
-        with concurrent.futures.ThreadPoolExecutor(max_workers=4) as pool:
-            for path,names,error in pool.map(download,paths):
-                if error: failed.append({'path':path,'error':error});continue
-                succeeded+=1; merged[Path(path).stem].update(names);count+=len(names)
-        if not succeeded: raise RuntimeError('Aucun catalogue distant accessible. Déploiement interrompu.')
-    lb=merge_launchbox(args.launchbox,merged,platforms) if args.launchbox else None
-    index={}
-    for sys,names in sorted(merged.items()):
-        if not names: continue
-        filename=hashlib.sha256(sys.encode()).hexdigest()[:16]+'.json'; rel='data/catalog/'+filename
-        write_json(out/rel,sorted(names,key=lambda x:(x.casefold(),x)));index[sys]=rel
-    images,media_report=build_media(out,args.media_manifest)
-    if args.fetch:
-        media_report.update(fetch_public_hardware(out,platforms,images))
-        paths={v['path'] for v in images.values()}
-        media_report.update(image_references=len(images),unique_images=len(paths),deduplicated_images=len(images)-len(paths),image_bytes=sum((out/p).stat().st_size for p in paths))
-    total=sum(len(a) for a in merged.values())
-    report={'status':'fetched' if args.fetch else 'starter','platforms':len(index),'editions':total,'duplicate_entries_removed':max(0,count+(lb or {}).get('added_titles',0)-total),'sources_success':succeeded,'sources_failed':failed,'launchbox':lb,**media_report}
-    write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'report':report})
-    write_json(out/'data/report.json',report)
-    if out!=ROOT: shutil.copy2(ROOT/'index.html',out/'index.html')
-    (out/'.nojekyll').touch()
-    print(json.dumps(report,ensure_ascii=False,indent=2))
-    size=sum(f.stat().st_size for f in out.rglob('*') if f.is_file())
-    if size>950_000_000: raise RuntimeError('Site supérieur à 950 Mo. Réduire les images ou choisir un hébergement adapté.')
-if __name__=='__main__': main()
-,photo,re.I): continue
+        if Path(photo).suffix.lower() not in ('.png','.jpg','.jpeg','.webp'): continue
         key=json.dumps(['hardware',name],ensure_ascii=False,separators=(',',':'))
         if key not in images: files.setdefault(photo,[]).append(key)
     stats['commons_candidates']=sum(map(len,files.values()))
@@ -301,6 +260,10 @@ def main():
         filename=hashlib.sha256(sys.encode()).hexdigest()[:16]+'.json'; rel='data/catalog/'+filename
         write_json(out/rel,sorted(names,key=lambda x:(x.casefold(),x)));index[sys]=rel
     images,media_report=build_media(out,args.media_manifest)
+    if args.fetch:
+        media_report.update(fetch_public_hardware(out,platforms,images))
+        paths={v['path'] for v in images.values()}
+        media_report.update(image_references=len(images),unique_images=len(paths),deduplicated_images=len(images)-len(paths),image_bytes=sum((out/p).stat().st_size for p in paths))
     total=sum(len(a) for a in merged.values())
     report={'status':'fetched' if args.fetch else 'starter','platforms':len(index),'editions':total,'duplicate_entries_removed':max(0,count+(lb or {}).get('added_titles',0)-total),'sources_success':succeeded,'sources_failed':failed,'launchbox':lb,**media_report}
     write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'report':report})
