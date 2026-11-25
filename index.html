@@ -724,7 +724,7 @@ async function rvPagesDirect(candidate){
  rvPages.directPending.set(url,task)
  try{return await task?{...candidate,display:url}:null}finally{rvPages.directPending.delete(url)}
 }
-function rvPagesRecord(key,r){rvPages.preview.delete(key);rvPages.preview.set(key,r);while(rvPages.preview.size>500)rvPages.preview.delete(rvPages.preview.keys().next().value)}
+function rvPagesRecord(key,r){rvPages.preview.delete(key);rvPages.preview.set(key,{url:r.url,source:r.source,credit:r.credit});while(rvPages.preview.size>500)rvPages.preview.delete(rvPages.preview.keys().next().value)}
 function rvPagesImageMarkup(k,alt,cls='cover'){
  const r=rvPagesPreview(k),src=r?.display||''
  return '<div class="picture '+esc(cls)+' rv-art" data-art-key="'+esc(k)+'" data-art-url="" data-art-alt="'+esc(alt)+'"'+(src?' data-art-watched="1"':'')+'><img alt="'+esc(alt)+'" '+(src?'src="'+esc(src)+'"':'hidden')+' decoding="async" referrerpolicy="no-referrer"><span class="picture-fallback" '+(src?'hidden':'')+'>Préparation de la photo…</span><small class="rv-art-credit" '+(src?'':'hidden')+' title="'+esc(r?.credit||'')+'">'+esc(r?.source||'')+'</small></div>'
