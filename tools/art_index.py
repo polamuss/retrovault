@@ -51,14 +51,29 @@ def files_for(repo,branch):
         if time.time()-file.stat().st_mtime<7*86400: return old
     except (OSError,ValueError): pass
     try:
-        data=request_json('https://api.github.com/repos/libretro-thumbnails/'+repo+'/git/trees/'+branch+'?recursive=1')
-        if data.get('truncated'): raise ValueError('arbre incomplet')
+        base='https://api.github.com/repos/libretro-thumbnails/'+repo+'/git/trees/'
         result={k:[] for k in KINDS}
-        for row in data.get('tree',[]):
-            path=row.get('path','')
-            kind,sep,filename=path.partition('/')
+        def add(kind,filename,row):
             if row.get('type')=='blob' and kind in result and '/' not in filename and filename.lower().endswith('.png') and len(filename)<=350:
                 result[kind].append(filename[:-4])
+        try:
+            data=request_json(base+branch+'?recursive=1')
+        except Exception:
+            data={'truncated':True}
+        if data.get('truncated'):
+            # Three independent directory trees are smaller and avoid recursive-tree API truncation.
+            root=request_json(base+branch)
+            for row in root.get('tree',[]):
+                kind=row.get('path','')
+                sha=row.get('sha','')
+                if kind not in result or not re.fullmatch(r'[a-f0-9]{40}',sha): continue
+                sub=request_json(base+sha)
+                if sub.get('truncated'): raise ValueError('dossier images incomplet '+kind)
+                for file in sub.get('tree',[]): add(kind,file.get('path',''),file)
+        else:
+            for row in data.get('tree',[]):
+                kind,sep,filename=row.get('path','').partition('/')
+                add(kind,filename,row)
         file.write_text(json.dumps(result,ensure_ascii=False),encoding='utf-8')
         return result
     except Exception as e:

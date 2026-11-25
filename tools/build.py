@@ -314,7 +314,24 @@ def main():
     art,art_stats=index_games(out,merged,base_title,write_json) if args.fetch else ({},{})
     media_report.update(art_stats)
     media_report.update(lb_stats)
+    covered=0
+    covers=0
+    grouped=0
+    grouped_covered=0
+    overlap=0
+    for sys,names in merged.items():
+        lr=read_json(out/art[sys]).get('rows',{}) if sys in art else {}
+        launch=read_json(out/lbart[sys]) if sys in lbart else {}
+        local={json.loads(k)[1] for k in images if json.loads(k)[0]==sys}
+        union=(set(lr)|set(launch)|local)&names
+        covered+=len(union)
+        overlap+=len(set(lr)&set(launch)&names)
+        covers+=sum(n in local or (n in lr and lr[n][0]==0) or any(row[1] in (0,1) for row in launch.get(n,[])) for n in union)
+        grouped+=len({base_title(n) for n in names})
+        grouped_covered+=len({base_title(n) for n in union})
+    media_report.update(game_editions_with_image_reference=covered,game_editions_with_cover_reference=covers,game_reference_overlap=overlap,game_title_groups=grouped,game_title_groups_with_image_reference=grouped_covered)
     total=sum(len(a) for a in merged.values())
+    media_report['game_editions_without_image_reference']=total-covered
     report={'status':'fetched' if args.fetch else 'starter','platforms':len(index),'editions':total,'duplicate_entries_removed':max(0,count+(lb or {}).get('added_titles',0)-total),'sources_success':succeeded,'sources_failed':failed,'launchbox':lb,**media_report}
     write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'art':art,'launchbox_art':lbart,'report':report})
     write_json(out/'data/report.json',report)
