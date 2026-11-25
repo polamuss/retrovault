@@ -6,6 +6,7 @@ import argparse, concurrent.futures, hashlib, json, re, shutil, urllib.error, ur
 from collections import defaultdict
 from pathlib import Path
 from art_index import index_games, discover_hardware, search_missing_hardware
+from launchbox_index import apply_index
 ROOT=Path(__file__).resolve().parents[1]
 BASE='https://raw.githubusercontent.com/libretro/libretro-database/master/'
 
@@ -297,6 +298,8 @@ def main():
                 succeeded+=1; merged[Path(path).stem].update(names);count+=len(names)
         if not succeeded: raise RuntimeError('Aucun catalogue distant accessible. Déploiement interrompu.')
     lb=merge_launchbox(args.launchbox,merged,platforms) if args.launchbox else None
+    lbart,lb_stats=apply_index(out,merged,platforms,base_title,norm,write_json) if args.fetch else ({},{})
+    count+=lb_stats.get('launchbox_added_titles',0)
     index={}
     for sys,names in sorted(merged.items()):
         if not names: continue
@@ -310,16 +313,17 @@ def main():
     write_image_credits(out,images)
     art,art_stats=index_games(out,merged,base_title,write_json) if args.fetch else ({},{})
     media_report.update(art_stats)
+    media_report.update(lb_stats)
     total=sum(len(a) for a in merged.values())
     report={'status':'fetched' if args.fetch else 'starter','platforms':len(index),'editions':total,'duplicate_entries_removed':max(0,count+(lb or {}).get('added_titles',0)-total),'sources_success':succeeded,'sources_failed':failed,'launchbox':lb,**media_report}
-    write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'art':art,'report':report})
+    write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'art':art,'launchbox_art':lbart,'report':report})
     write_json(out/'data/report.json',report)
     if out!=ROOT: shutil.copy2(ROOT/'index.html',out/'index.html')
     (out/'.nojekyll').touch()
     for _ in range(3):
         report['site_bytes']=sum(f.stat().st_size for f in out.rglob('*') if f.is_file())
         write_json(out/'data/report.json',report)
-        write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'art':art,'report':report})
+        write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'art':art,'launchbox_art':lbart,'report':report})
     print(json.dumps(report,ensure_ascii=False,indent=2))
     size=sum(f.stat().st_size for f in out.rglob('*') if f.is_file())
     if size>950_000_000: raise RuntimeError('Site supérieur à 950 Mo. Réduire les images ou choisir un hébergement adapté.')
