@@ -116,7 +116,7 @@ def build_media(out,manifest):
     return images,{'image_references':len(images),'unique_images':len(unique),'deduplicated_images':duplicates,'image_bytes':sum(unique.values())}
 
 def fetch_public_hardware(out, platforms, images):
-    """Publish only explicitly identified Commons photos marked public domain or CC0.
+    """Publish explicitly identified and freely licensed Commons photos with attribution.
     Reuse converted content across builds. No guessing artwork, no external browser requests."""
     from PIL import Image, ImageOps
     from io import BytesIO
@@ -128,13 +128,22 @@ def fetch_public_hardware(out, platforms, images):
     ua='RetroVault catalogue image builder (https://github.com/polamuss/retrovault)'
     stats={'commons_candidates':0,'commons_published':0,'commons_skipped':0,'commons_errors':0,'commons_cache_hits':0}
     files={}
-    for p in platforms:
-        photo=p.get('photo')
-        name=p.get('name')
-        if not valid(photo) or not valid(name): continue
-        if Path(photo).suffix.lower() not in ('.png','.jpg','.jpeg','.webp'): continue
+    def add(photo,name):
+        if not valid(photo) or not valid(name): return
+        if Path(photo).suffix.lower() not in ('.png','.jpg','.jpeg','.webp'): return
         key=json.dumps(['hardware',name],ensure_ascii=False,separators=(',',':'))
-        if key not in images: files.setdefault(photo,[]).append(key)
+        if key not in images and key not in files.setdefault(photo,[]): files[photo].append(key)
+    for p in platforms: add(p.get('photo'),p.get('name'))
+    for p in platforms:
+        for alt in p.get('photoAlternates',[]): add(alt.get('file'),p.get('name'))
+    def free_license(license):
+        return license in ('public domain','cc0','cc0 1.0','cc0 1.0 universal') or bool(re.fullmatch(r'cc by(?:-sa)? [1-4]\.[05]',license))
+    def license_url(license):
+        if license=='public domain': return 'https://creativecommons.org/publicdomain/mark/1.0/'
+        if license.startswith('cc0'): return 'https://creativecommons.org/publicdomain/zero/1.0/'
+        match=re.fullmatch(r'cc (by(?:-sa)?) ([1-4]\.[05])',license)
+        return 'https://creativecommons.org/licenses/'+match[1]+'/'+match[2]+'/' if match else ''
+
     stats['commons_candidates']=sum(map(len,files.values()))
     def request(url,limit):
         req=urllib.request.Request(url,headers={'User-Agent':ua,'Accept':'*/*'})
@@ -150,7 +159,7 @@ def fetch_public_hardware(out, platforms, images):
         if not meta.is_file(): return None
         try:
             m=read_json(meta)
-            if m.get('file')!=photo or m.get('license') not in ('public domain','cc0','cc0 1.0','cc0 1.0 universal'): return None
+            if m.get('file')!=photo or not free_license(m.get('license','')): return None
             blob=(cache/(token+'.avif')).read_bytes()
             if hashlib.sha256(blob).hexdigest()!=m.get('digest'): return None
             return m,blob
@@ -160,8 +169,9 @@ def fetch_public_hardware(out, platforms, images):
         dest=out/rel
         if not dest.is_file(): dest.write_bytes(blob)
         for key in files[photo]:
-            images[key]={'path':rel,'credit':m['credit'],'source':m['source'],'license':m['license']}
-        stats['commons_published']+=len(files[photo])
+            if key in images: continue
+            images[key]={'path':rel,'credit':m['credit'],'source':m['source'],'license':m['license'],'license_url':license_url(m['license'])}
+            stats['commons_published']+=1
     pending=[]
     for photo in files:
         hit=cached(photo)
@@ -184,6 +194,7 @@ def fetch_public_hardware(out, platforms, images):
             if isinstance(e,urllib.error.HTTPError) and e.code in (429,503): break
             continue
         for photo in group:
+            if all(key in images for key in files[photo]): continue
             try:
                 title='File:'+photo
                 for _ in range(5):
@@ -196,10 +207,10 @@ def fetch_public_hardware(out, platforms, images):
                 info=info[0]
                 meta=info.get('extmetadata',{})
                 license=meta.get('LicenseShortName',{}).get('value','').strip().lower()
-                if license not in ('public domain','cc0','cc0 1.0','cc0 1.0 universal'):
+                if not free_license(license):
                     stats['commons_skipped']+=1
                     continue
-                if meta.get('Copyrighted',{}).get('value','').lower()=='true':
+                if license=='public domain' and meta.get('Copyrighted',{}).get('value','').lower()=='true':
                     stats['commons_skipped']+=1
                     continue
                 url=info.get('url','')
@@ -220,7 +231,8 @@ def fetch_public_hardware(out, platforms, images):
                     im.save(buf,format='AVIF',quality=55,speed=6)
                 blob=buf.getvalue()
                 author=htmlmod.unescape(re.sub(r'<[^>]+>','',meta.get('Artist',{}).get('value',''))).strip()
-                m={'file':photo,'license':license,'source':source,'credit':('Wikimedia Commons - '+author+' - '+license+' - '+source)[:700],'digest':hashlib.sha256(blob).hexdigest()}
+                if license.startswith('cc by') and not author: continue
+                m={'file':photo,'license':license,'source':source,'credit':('Wikimedia Commons - '+author+' - '+license+' - '+license_url(license)+' - redimensionnee et convertie en AVIF - '+source)[:700],'digest':hashlib.sha256(blob).hexdigest()}
                 token=hashlib.sha256(photo.encode()).hexdigest()
                 (cache/(token+'.avif')).write_bytes(blob)
                 write_json(cache/(token+'.json'),m)
@@ -232,6 +244,19 @@ def fetch_public_hardware(out, platforms, images):
                 if isinstance(e,urllib.error.HTTPError) and e.code in (429,503): return stats
         time.sleep(1)
     return stats
+
+def write_image_credits(out,images):
+    from html import escape
+    rows=[]
+    for key,entry in images.items():
+        name=' / '.join(json.loads(key))
+        credit=escape(entry.get('credit',''))
+        source=entry.get('source','')
+        license=entry.get('license_url','')
+        link=(' <a href="'+escape(source,quote=True)+'">Fichier original</a>') if source.startswith('https://commons.wikimedia.org/') else ''
+        terms=(' <a href="'+escape(license,quote=True)+'">Licence</a>') if license.startswith('https://creativecommons.org/') else ''
+        rows.append('<li>'+escape(name)+' - '+credit+link+terms+'</li>')
+    (out/'credits.html').write_text('<!doctype html><html lang="fr"><meta charset="utf-8"><title>Credits images RetroVault</title><h1>Credits des images</h1><p>Photos redimensionnees et converties. Les licences libres de chaque image, y compris partage a l identique, restent applicables aux images modifiees.</p><ul>'+''.join(rows)+'</ul></html>',encoding='utf-8')
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--output',type=Path,default=ROOT/'dist');p.add_argument('--fetch',action='store_true');p.add_argument('--launchbox',type=Path);p.add_argument('--media-manifest',type=Path,default=ROOT/'tools'/'approved-images.json');args=p.parse_args()
@@ -264,6 +289,7 @@ def main():
         media_report.update(fetch_public_hardware(out,platforms,images))
         paths={v['path'] for v in images.values()}
         media_report.update(image_references=len(images),unique_images=len(paths),deduplicated_images=len(images)-len(paths),image_bytes=sum((out/p).stat().st_size for p in paths))
+    write_image_credits(out,images)
     total=sum(len(a) for a in merged.values())
     report={'status':'fetched' if args.fetch else 'starter','platforms':len(index),'editions':total,'duplicate_entries_removed':max(0,count+(lb or {}).get('added_titles',0)-total),'sources_success':succeeded,'sources_failed':failed,'launchbox':lb,**media_report}
     write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'report':report})
