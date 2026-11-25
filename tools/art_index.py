@@ -161,3 +161,112 @@ def discover_hardware(platforms,mapping):
     for name,p in selected.items():
         if mapping[name] in known: result.append((name,known[mapping[name]]))
     return result
+
+
+def search_missing_hardware(platforms, images, free_license, config):
+    """One targeted Commons search per missing hardware model, with cached candidates."""
+    import html as htmlmod
+    import unicodedata
+    aliases=config.get('aliases',{})
+    cached_file=CACHE/'commons-search-v2.json'
+    try: cached=json.loads(cached_file.read_text(encoding='utf-8'))
+    except (OSError,ValueError): cached={}
+    now=time.time()
+    def norm(s):
+        s=unicodedata.normalize('NFKD',str(s or '').casefold())
+        s=''.join(c for c in s if not unicodedata.combining(c))
+        return ' '.join(re.sub(r'[^a-z0-9]+',' ',s).split())
+    def contains(text,token): return bool(token) and (' '+token+' ') in (' '+text+' ')
+    def names(p):
+        name=p['name']
+        a=aliases.get(name,[name])
+        if not p.get('parent'):
+            a=a+[re.sub(r'\s+originale?$', '',name,flags=re.I)]
+        model=p.get('model','')
+        if re.fullmatch(r'[A-Z]{2,5}[- ]?[0-9]{2,5}[A-Z]?',model,re.I):
+            a=a+[model]
+        return list(dict.fromkeys(norm(n) for n in a if len(norm(n))>=3))
+    byname={p['name']:p for p in platforms}
+    byparent=defaultdict(list)
+    for p in platforms:
+        if p.get('parent'): byparent[p['parent']].append(p)
+    banned=re.compile(r'\b(logo|icon|flag|diagram|schematic|manual|motherboard|pcb|teardown|disassembly|prototype drawing|advertisement|poster|box art|fan art|cosplay|protein|gene|film|album|screenshot|gameplay|packaging)\b')
+    accessory=re.compile(r'\b(controller|joystick|gamepad|accessory|peripheral|adapter|manette|memory card|add on|expansion|sensor|camera|dock|printer|robot|microphone|keyboard|mouse|cable|wheel|bongos|maracas|headset|charger|trackball|volant|carte memoire|gun|zapper|remote|multitap)\b')
+    hardware=re.compile(r'\b(console|consoles|computer|computers|ordinateur|handheld|microcomputer|video game|gaming system|game system|home computer|personal computer|controller|accessory|system|set)\b')
+    def rank(row,p):
+        info=row.get('imageinfo',[{}])[0]
+        meta=info.get('extmetadata',{})
+        license=meta.get('LicenseShortName',{}).get('value','').strip().lower()
+        if not free_license(license): return None
+        file=row.get('title','').removeprefix('File:')
+        if Path(file).suffix.lower() not in ('.png','.jpg','.jpeg','.webp'): return None
+        if info.get('mime') not in ('image/png','image/jpeg','image/webp'): return None
+        if not 0<info.get('width',0)*info.get('height',0)<=40000000 or info.get('size',0)>30*1024*1024: return None
+        t=norm(Path(file).stem)
+        raw=' '.join([meta.get('ImageDescription',{}).get('value',''),meta.get('Categories',{}).get('value','')])
+        desc=norm(htmlmod.unescape(re.sub(r'<[^>]+>',' ',raw)))
+        alltext=t+' '+desc
+        if banned.search(t): return None
+        a=names(p)
+        hits=[n for n in a if contains(t,n)]
+        if not hits: return None
+        brand=norm(p.get('brand','').split(' / ')[0])
+        is_acc=p.get('category')=='accessoire'
+        if is_acc and not accessory.search(alltext): return None
+        if not is_acc and not (hardware.search(alltext) or contains(alltext,brand) and len(max(hits,key=len))>=5): return None
+        if not is_acc and accessory.search(t) and not re.search(r'\b(console|computer|handheld|set|system)\b',t): return None
+        if p['name']=='MSX' and re.search(r'\bmsx\s*2\b',alltext): return None
+        if p['name']=='MSX2' and re.search(r'msx\s*2\s*(plus|\+)',file+' '+raw,re.I): return None
+        if p.get('parent'):
+            parent=byname.get(p['parent'],{})
+            parent_alias=names(parent) if parent else []
+            if not any(n not in parent_alias for n in hits): return None
+        family=p.get('parent') or p['name']
+        for other in byparent.get(family,[]):
+            if other['name']==p['name']: continue
+            if any(len(n)>=5 and n not in a and not any(contains(x,n) for x in a) and contains(t,n) for n in names(other)):
+                return None
+        score=max(len(n) for n in hits)*3+10*contains(t,brand)
+        if hardware.search(t): score+=8
+        if re.search(r'\b(front|console|set|handheld|controller|computer|open)\b',t): score+=5
+        if re.search(r'\b(back|rear|bottom|side|detail|closeup|comparison|collection|museum)\b',t): score-=5
+        return (score,file)
+    selected=[p for p in platforms if p.get('category')!='logiciel' and json.dumps(['hardware',p['name']],ensure_ascii=False,separators=(',',':')) not in images]
+    selected.sort(key=lambda p:(p.get('category')=='accessoire',bool(p.get('parent')),p['name']))
+    results=[]
+    stats={'commons_search_targets':len(selected),'commons_search_requests':0,'commons_search_cache_hits':0,'commons_search_candidates':0}
+    for p in selected:
+        key=p['name']
+        previous=cached.get(key,{})
+        if previous.get('files') or now-previous.get('at',0)<7*86400:
+            stats['commons_search_cache_hits']+=1
+            found=previous.get('files',[])
+        else:
+            a=names(p)
+            if not a: continue
+            # Search the longest precise alias, preferring the original name when comparable.
+            query=max(a,key=len)
+            brand=p.get('brand','').split(' / ')[0]
+            if brand and not contains(query,norm(brand)): query=brand+' '+query
+            if p.get('category')=='accessoire': query+=' video game accessory'
+            else: query+=' console'
+            params={'action':'query','format':'json','formatversion':'2','generator':'search','gsrsearch':query,'gsrnamespace':'6','gsrlimit':'18','prop':'imageinfo','iiprop':'size|mime|extmetadata','iiextmetadatafilter':'LicenseShortName|ImageDescription|Categories','maxlag':'5'}
+            try:
+                payload=request_json('https://commons.wikimedia.org/w/api.php?'+urllib.parse.urlencode(params),4*1024*1024)
+                if 'error' in payload: raise ValueError(str(payload['error']))
+                ranked=[r for row in payload.get('query',{}).get('pages',[]) if (r:=rank(row,p))]
+                found=[file for score,file in sorted(ranked,reverse=True)[:3]]
+                cached[key]={'at':now,'files':found}
+                stats['commons_search_requests']+=1
+                time.sleep(1.2)
+            except Exception as e:
+                print('Commons search:',key,str(e))
+                if getattr(e,'code',None) in (429,503) or 'maxlag' in str(e).lower(): break
+                time.sleep(2)
+                continue
+        for file in found:
+            results.append((key,file))
+            stats['commons_search_candidates']+=1
+    CACHE.mkdir(parents=True,exist_ok=True)
+    cached_file.write_text(json.dumps(cached,ensure_ascii=False),encoding='utf-8')
+    return results,stats

@@ -1,0 +1,491 @@
+{
+  "aliases": {
+    "R.O.B. (robot NES)": [
+      "nes rob",
+      "rob robotic operating buddy",
+      "r o b",
+      "robot nes"
+    ],
+    "Family Computer Robot (R.O.B.)": [
+      "famicom robot",
+      "family computer robot",
+      "hvc 012"
+    ],
+    "MSX": [
+      "msx",
+      "msx1",
+      "msx 1",
+      "hb 75p"
+    ],
+    "MSX2": [
+      "msx2",
+      "msx 2",
+      "vg8235",
+      "vg 8235",
+      "nms8250",
+      "nms 8250"
+    ],
+    "NES": [
+      "nes",
+      "nintendo entertainment system"
+    ],
+    "Super Nintendo": [
+      "super nintendo",
+      "snes",
+      "super nes"
+    ],
+    "Mega Drive": [
+      "mega drive",
+      "megadrive"
+    ],
+    "Genesis": [
+      "sega genesis",
+      "genesis"
+    ],
+    "Saturn": [
+      "sega saturn"
+    ],
+    "Switch": [
+      "nintendo switch"
+    ],
+    "Odyssey": [
+      "magnavox odyssey"
+    ],
+    "PET": [
+      "commodore pet"
+    ],
+    "Pico": [
+      "sega pico"
+    ],
+    "X1": [
+      "sharp x1"
+    ],
+    "Naomi": [
+      "sega naomi"
+    ],
+    "Naomi 2": [
+      "sega naomi 2"
+    ],
+    "Game.com": [
+      "tiger game com"
+    ],
+    "PlayStation Portable": [
+      "playstation portable",
+      "sony psp",
+      "psp"
+    ],
+    "PlayStation Vita": [
+      "playstation vita",
+      "ps vita"
+    ],
+    "CD-i": [
+      "philips cd i",
+      "philips cdi"
+    ],
+    "Amiga CDTV": [
+      "amiga cdtv",
+      "commodore cdtv"
+    ],
+    "Game Boy Advance SP": [
+      "game boy advance sp",
+      "gameboy advance sp",
+      "gba sp"
+    ],
+    "Manette NES": [
+      "NES controller",
+      "Nintendo Entertainment System controller",
+      "manette NES"
+    ],
+    "Manette Super Nintendo": [
+      "SNES controller",
+      "Super Nintendo controller",
+      "manette Super Nintendo"
+    ],
+    "Manette Nintendo 64": [
+      "Nintendo 64 controller",
+      "N64 controller",
+      "manette Nintendo 64"
+    ],
+    "Manette GameCube": [
+      "GameCube controller",
+      "manette GameCube"
+    ],
+    "Manette Dreamcast": [
+      "Dreamcast controller",
+      "manette Dreamcast"
+    ],
+    "Manette Xbox 360": [
+      "Xbox 360 controller",
+      "manette Xbox 360"
+    ],
+    "Manette Xbox One": [
+      "Xbox One controller",
+      "manette Xbox One"
+    ],
+    "Carte mémoire GameCube": [
+      "GameCube memory card",
+      "carte mémoire GameCube"
+    ],
+    "Carte mémoire PlayStation": [
+      "PlayStation memory card",
+      "PS1 memory card",
+      "carte mémoire PlayStation"
+    ],
+    "Carte mémoire PlayStation 2": [
+      "PlayStation 2 memory card",
+      "PS2 memory card",
+      "carte mémoire PlayStation 2"
+    ],
+    "Wii Wheel (volant)": [
+      "Wii Wheel",
+      "RVL-024",
+      "volant Wii"
+    ],
+    "Souris Super NES (SNES Mouse)": [
+      "SNES mouse",
+      "Super NES mouse",
+      "Super Nintendo mouse"
+    ],
+    "DK Bongos (Bongo DK)": [
+      "DK Bongos",
+      "Donkey Kong bongos"
+    ],
+    "Mega CD Model 1": [
+      "Mega CD Model 1",
+      "Sega CD Model 1"
+    ],
+    "Mega CD Model 2": [
+      "Mega CD Model 2",
+      "Sega CD Model 2"
+    ],
+    "GameCube WaveBird": [
+      "WaveBird",
+      "GameCube WaveBird"
+    ],
+    "Manette Mega Drive 3 boutons": [
+      "Mega Drive 3 button controller",
+      "Genesis 3 button controller"
+    ],
+    "Manette Mega Drive 6 boutons": [
+      "Mega Drive 6 button controller",
+      "Genesis 6 button controller"
+    ]
+  },
+  "files": {
+    "Super Famicom": [
+      "Super-Famicom-Console-Set.jpg",
+      "Super Famicom.jpg",
+      "Super-Famicom-Console-Set.png",
+      "Super Famicom.png"
+    ],
+    "Super Famicom originale": [
+      "Super-Famicom-Console-Set.jpg",
+      "Super Famicom.jpg",
+      "Super Famicom.png"
+    ],
+    "PC Engine": [
+      "PC-Engine-Console-Set.png",
+      "PC-Engine-Console-Set.jpg",
+      "PC Engine.jpg",
+      "PC-Engine.png"
+    ],
+    "SG-1000": [
+      "Sega-SG-1000-Console-Set.jpg",
+      "Sega-SG-1000-Console-Set.png",
+      "SG-1000.png"
+    ],
+    "Famicom Disk System": [
+      "Famicom-Disk-System.jpg",
+      "Famicom-Disk-System-Set.jpg",
+      "DiskSystem.png"
+    ],
+    "Game & Watch": [
+      "Game and Watch Ball.jpg"
+    ],
+    "Pokémon Mini": [
+      "Pokemon-Mini.png"
+    ],
+    "Mega CD": [
+      "Sega-CD-Model1-Set.jpg",
+      "Sega-CD-Model1-Set.png"
+    ],
+    "Sega 32X": [
+      "Sega-32X-Set.png",
+      "Sega-32X-Set.jpg",
+      "Sega 32X.png"
+    ],
+    "Neo Geo CD": [
+      "Neo-Geo-CD-Console-Set.png"
+    ],
+    "Neo Geo Pocket": [
+      "Neo-Geo-Pocket-Handheld.jpg"
+    ],
+    "Neo Geo Pocket Color": [
+      "Neo-Geo-Pocket-Color-Blue.jpg"
+    ],
+    "WonderSwan": [
+      "WonderSwan-Black-Left.jpg",
+      "Bandai-WonderSwan-Console.jpg",
+      "WonderSwan.png"
+    ],
+    "WonderSwan Color": [
+      "WonderSwan-Color.jpg"
+    ],
+    "PlayStation 4": [
+      "Sony-PlayStation-4-PS4-Console-wDualShock-4.jpg"
+    ],
+    "PlayStation 5": [
+      "PlayStation 5 and DualSense.jpg"
+    ],
+    "PS one": [
+      "PSone-Console-Set-NoLCD.png",
+      "PSone-Console-Set-NoLCD.jpg",
+      "PSOne.png"
+    ],
+    "PS3 Slim": [
+      "PS3-Slim-Console-Set.jpg",
+      "PS3-Slim.png"
+    ],
+    "PS3 Super Slim": [
+      "PS3-Super-Slim-Console-Set.jpg",
+      "PS3-Super-Slim.png"
+    ],
+    "PSP Go": [
+      "PSP-Go-FL.jpg",
+      "PSP-Go.png"
+    ],
+    "Xbox One S": [
+      "Xbox-One-S-Console-Set.jpg",
+      "Xbox One S.png"
+    ],
+    "Xbox One X": [
+      "Xbox-One-X-Console-Set.jpg",
+      "Xbox One X.png"
+    ],
+    "Manette NES": [
+      "NES-Controller-FL.jpg",
+      "NES-Controller-FL.png"
+    ],
+    "Manette Super Nintendo": [
+      "SNES-Controller-Flat.jpg",
+      "SNES-Controller-Flat.png"
+    ],
+    "Manette Nintendo 64": [
+      "N64-Controller-Gray.jpg",
+      "N64-Controller-Gray.png"
+    ],
+    "Manette GameCube": [
+      "GameCube-controller.jpg",
+      "GameCube-Controller-FL.jpg"
+    ],
+    "Manette Dreamcast": [
+      "Dreamcast-Controller.jpg"
+    ],
+    "Manette Xbox 360": [
+      "Xbox-360-Wireless-Controller-White.jpg"
+    ],
+    "GameCube WaveBird": [
+      "GameCube-Wavebird-Controller.png",
+      "GameCube-Wavebird-Controller.jpg"
+    ],
+    "Genesis": [
+      "Sega-Genesis-Mod1-Set.jpg",
+      "Sega-Genesis-Mod1-Set.png"
+    ],
+    "SuperGrafx": [
+      "SuperGrafx.png"
+    ],
+    "PC-FX": [
+      "PC-FX-Console-Set.jpg"
+    ],
+    "Playdia": [
+      "Bandai-Playdia-Set-R.jpg"
+    ],
+    "Amiga CD32": [
+      "Amiga-CD32-wController-L.jpg"
+    ],
+    "PV-1000": [
+      "Casio-PV1000-Console-Set.jpg"
+    ],
+    "Super Cassette Vision": [
+      "Super Cassette Vision.png"
+    ],
+    "GX4000": [
+      "Amstrad-GX4000-Console-Set.jpg"
+    ],
+    "Neo Geo MVS": [
+      "Neo Geo MVS.png"
+    ],
+    "Loopy": [
+      "Casio-Loopy-Console-Set.jpg"
+    ],
+    "LaserActive": [
+      "LaserActive.png"
+    ],
+    "Pippin": [
+      "Bandai-Apple-Pippin-Console-FL.jpg"
+    ],
+    "NES Top Loader": [
+      "NES Toploader.png"
+    ],
+    "Family Computer": [
+      "Famicom.png"
+    ],
+    "AV Famicom": [
+      "AVFamicom.png"
+    ],
+    "Super Famicom Jr.": [
+      "Super Famicom Jr.png"
+    ],
+    "SNES Jr.": [
+      "SNES Jr.png"
+    ],
+    "PS3 Fat": [
+      "PS3-Fat.png"
+    ],
+    "PS4 originale": [
+      "PS4.png"
+    ],
+    "PS4 Slim": [
+      "PS4 Slim.png"
+    ],
+    "PS4 Pro": [
+      "PS4 Pro.png"
+    ],
+    "PSP 1000": [
+      "PSP-1000.png"
+    ],
+    "PSP 2000": [
+      "PSP-2000.png"
+    ],
+    "PSP 3000": [
+      "PSP-3000.png"
+    ],
+    "PS Vita OLED": [
+      "Vita OLED.png"
+    ],
+    "Master System originale": [
+      "SMS.png"
+    ],
+    "Mega Drive Model 1": [
+      "Sega Mega Drive - European PAL Model 1.jpg"
+    ],
+    "Genesis Model 1": [
+      "Genesis Model 1.png"
+    ],
+    "Genesis Model 2": [
+      "Genesis Model 2.png"
+    ],
+    "Genesis 3": [
+      "Genesis Model 3.png"
+    ],
+    "Saturn Model 1": [
+      "Saturn Model 1.png"
+    ],
+    "Saturn Model 2": [
+      "Saturn Model 2.png"
+    ],
+    "Xbox 360 originale": [
+      "Xbox 360.png"
+    ],
+    "Xbox 360 S": [
+      "Xbox 360 S.png"
+    ],
+    "Xbox 360 E": [
+      "Xbox 360 E.png"
+    ],
+    "Xbox Series X": [
+      "Xbox Series X.png"
+    ],
+    "Xbox Series S": [
+      "Xbox Series S.png"
+    ],
+    "Atari VCS Heavy Sixer": [
+      "Atari-2600-Heavy-Sixer-2K.jpg"
+    ],
+    "Atari 2600 Darth Vader": [
+      "Atari-2600-Vader.png"
+    ],
+    "Atari 2600 Jr.": [
+      "Atari-2600-Jr.png"
+    ],
+    "Neo Geo CD Top Loader": [
+      "Neo-Geo-CD-TopLoader-wController-FL.png"
+    ],
+    "PC Engine originale": [
+      "PC-Engine.png"
+    ],
+    "CoreGrafx": [
+      "CoreGrafx.png"
+    ],
+    "PC Engine Duo-R": [
+      "DuoR.png"
+    ],
+    "PC Engine LT": [
+      "PC Engine LT.jpg"
+    ],
+    "TurboExpress": [
+      "TurboExpress.png"
+    ],
+    "TurboDuo": [
+      "TurboDuo.png"
+    ],
+    "Panasonic 3DO FZ-1": [
+      "Panasonic 3DO FZ-1.png"
+    ],
+    "Panasonic 3DO FZ-10": [
+      "Panasonic 3DO FZ-10.png"
+    ],
+    "GoldStar 3DO": [
+      "GoldStar 3DO GDO-101M.png"
+    ],
+    "Sanyo TRY 3DO": [
+      "Sanyo 3DO TRY.png"
+    ],
+    "Intellivision II": [
+      "Intellivision II.png"
+    ],
+    "Cassette Vision": [
+      "Epoch-Cassette-Vision-Console.jpg"
+    ],
+    "Casio - Loopy": [
+      "Casio-Loopy-Console-Set.jpg"
+    ],
+    "Casio - PV-1000": [
+      "Casio-PV1000-Console-Set.jpg"
+    ],
+    "Mark III": [
+      "MarkIII.png"
+    ],
+    "Wii Mini": [
+      "Wii Mini.png"
+    ],
+    "Nintendo DSi XL": [
+      "DSi XL.png"
+    ],
+    "Nintendo DS Lite": [
+      "DS-Lite.png"
+    ],
+    "Nintendo 3DS XL": [
+      "3DS XL.png"
+    ],
+    "Game Boy Light": [
+      "Game Boy Light.png"
+    ],
+    "Game Boy Pocket": [
+      "Game Boy Pocket.png"
+    ],
+    "Game Boy Micro": [
+      "Game Boy Micro.png"
+    ],
+    "Mega CD Model 1": [
+      "Sega CD Model 1.png"
+    ],
+    "Mega CD Model 2": [
+      "Sega CD Model 2.png"
+    ],
+    "Atari Jaguar CD": [
+      "Atari-Jaguar-CD-wPro-Controller.jpg"
+    ]
+  }
+}

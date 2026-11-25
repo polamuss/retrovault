@@ -5,7 +5,7 @@ No ROM downloads. Only licensed hardware photos are published. Game indexes cont
 import argparse, concurrent.futures, hashlib, json, re, shutil, urllib.error, urllib.parse, urllib.request, unicodedata, xml.etree.ElementTree as ET, zipfile
 from collections import defaultdict
 from pathlib import Path
-from art_index import index_games, discover_hardware
+from art_index import index_games, discover_hardware, search_missing_hardware
 ROOT=Path(__file__).resolve().parents[1]
 BASE='https://raw.githubusercontent.com/libretro/libretro-database/master/'
 
@@ -147,6 +147,9 @@ def fetch_public_hardware(out, platforms, images):
 
     mapping=read_json(ROOT/'tools'/'hardware-articles.json')
     for name,photo in discover_hardware(platforms,mapping): add(photo,name)
+    config=read_json(ROOT/'tools'/'hardware-search.json')
+    for name,photos in config.get('files',{}).items():
+        for photo in photos: add(photo,name)
     stats['commons_candidates']=sum(map(len,files.values()))
     def request(url,limit):
         req=urllib.request.Request(url,headers={'User-Agent':ua,'Accept':'*/*'})
@@ -175,77 +178,89 @@ def fetch_public_hardware(out, platforms, images):
             if key in images: continue
             images[key]={'path':rel,'credit':m['credit'],'source':m['source'],'license':m['license'],'license_url':license_url(m['license'])}
             stats['commons_published']+=1
-    pending=[]
-    for photo in files:
-        hit=cached(photo)
-        if hit:
-            publish(photo,*hit)
-            stats['commons_cache_hits']+=1
-        else: pending.append(photo)
-    for offset in range(0,len(pending),15):
-        group=pending[offset:offset+15]
-        params={'action':'query','format':'json','formatversion':'2','redirects':'1','prop':'imageinfo','iiprop':'url|size|mime|extmetadata','iiextmetadatafilter':'LicenseShortName|Artist|Copyrighted','titles':'|'.join('File:'+p for p in group),'maxlag':'5'}
-        try:
-            payload=json.loads(request(api+'?'+urllib.parse.urlencode(params),4*1024*1024))
-            if 'error' in payload: raise ValueError(str(payload['error']))
-            query=payload.get('query',{})
-            aliases={x['from']:x['to'] for k in ('normalized','redirects') for x in query.get(k,[])}
-            pages={p['title']:p for p in query.get('pages',[])}
-        except Exception as e:
-            stats['commons_errors']+=len(group)
-            print('Commons API:',str(e))
-            if isinstance(e,urllib.error.HTTPError) and e.code in (429,503): break
-            continue
-        for photo in group:
+    def process_files():
+        pending=[]
+        for photo in files:
             if all(key in images for key in files[photo]): continue
+            hit=cached(photo)
+            if hit:
+                publish(photo,*hit)
+                stats['commons_cache_hits']+=1
+            else: pending.append(photo)
+        for offset in range(0,len(pending),15):
+            group=pending[offset:offset+15]
+            params={'action':'query','format':'json','formatversion':'2','redirects':'1','prop':'imageinfo','iiprop':'url|size|mime|extmetadata','iiextmetadatafilter':'LicenseShortName|Artist|Copyrighted','titles':'|'.join('File:'+p for p in group),'maxlag':'5'}
             try:
-                title='File:'+photo
-                for _ in range(5):
-                    if title not in aliases: break
-                    title=aliases[title]
-                info=pages.get(title,{}).get('imageinfo',[])
-                if not info:
-                    stats['commons_skipped']+=1
-                    continue
-                info=info[0]
-                meta=info.get('extmetadata',{})
-                license=meta.get('LicenseShortName',{}).get('value','').strip().lower()
-                if not free_license(license):
-                    stats['commons_skipped']+=1
-                    continue
-                if license=='public domain' and meta.get('Copyrighted',{}).get('value','').lower()=='true':
-                    stats['commons_skipped']+=1
-                    continue
-                url=info.get('url','')
-                source=info.get('descriptionurl','')
-                if urllib.parse.urlparse(url).hostname!='upload.wikimedia.org' or urllib.parse.urlparse(source).hostname!='commons.wikimedia.org':
-                    raise ValueError('source non valide')
-                if info.get('mime') not in ('image/png','image/jpeg','image/webp') or info.get('size',0)>30*1024*1024:
-                    stats['commons_skipped']+=1
-                    continue
-                if info.get('width',0)*info.get('height',0)>40_000_000:
-                    stats['commons_skipped']+=1
-                    continue
-                data=request(url,30*1024*1024)
-                with Image.open(BytesIO(data)) as raw:
-                    im=ImageOps.exif_transpose(raw).convert('RGBA')
-                    im.thumbnail((480,480),Image.Resampling.LANCZOS)
-                    buf=BytesIO()
-                    im.save(buf,format='AVIF',quality=55,speed=6)
-                blob=buf.getvalue()
-                author=htmlmod.unescape(re.sub(r'<[^>]+>','',meta.get('Artist',{}).get('value',''))).strip()
-                if license.startswith('cc by') and not author: continue
-                m={'file':photo,'license':license,'source':source,'credit':('Wikimedia Commons - '+author+' - '+license+' - '+license_url(license)+' - redimensionnee et convertie en AVIF - '+source)[:700],'digest':hashlib.sha256(blob).hexdigest()}
-                token=hashlib.sha256(photo.encode()).hexdigest()
-                (cache/(token+'.avif')).write_bytes(blob)
-                write_json(cache/(token+'.json'),m)
-                publish(photo,m,blob)
-                time.sleep(0.5)
+                payload=json.loads(request(api+'?'+urllib.parse.urlencode(params),4*1024*1024))
+                if 'error' in payload: raise ValueError(str(payload['error']))
+                query=payload.get('query',{})
+                aliases={x['from']:x['to'] for k in ('normalized','redirects') for x in query.get(k,[])}
+                pages={p['title']:p for p in query.get('pages',[])}
             except Exception as e:
-                stats['commons_errors']+=1
-                print('Commons image:',photo,str(e))
-                if isinstance(e,urllib.error.HTTPError) and e.code in (429,503): return stats
-        time.sleep(1)
+                stats['commons_errors']+=len(group)
+                print('Commons API:',str(e))
+                if isinstance(e,urllib.error.HTTPError) and e.code in (429,503): return False
+                continue
+            for photo in group:
+                if all(key in images for key in files[photo]): continue
+                try:
+                    title='File:'+photo
+                    for _ in range(5):
+                        if title not in aliases: break
+                        title=aliases[title]
+                    info=pages.get(title,{}).get('imageinfo',[])
+                    if not info:
+                        stats['commons_skipped']+=1
+                        continue
+                    info=info[0]
+                    meta=info.get('extmetadata',{})
+                    license=meta.get('LicenseShortName',{}).get('value','').strip().lower()
+                    if not free_license(license):
+                        stats['commons_skipped']+=1
+                        continue
+                    if license=='public domain' and meta.get('Copyrighted',{}).get('value','').lower()=='true':
+                        stats['commons_skipped']+=1
+                        continue
+                    url=info.get('url','')
+                    source=info.get('descriptionurl','')
+                    if urllib.parse.urlparse(url).hostname!='upload.wikimedia.org' or urllib.parse.urlparse(source).hostname!='commons.wikimedia.org':
+                        raise ValueError('source non valide')
+                    if info.get('mime') not in ('image/png','image/jpeg','image/webp') or info.get('size',0)>30*1024*1024:
+                        stats['commons_skipped']+=1
+                        continue
+                    if info.get('width',0)*info.get('height',0)>40_000_000:
+                        stats['commons_skipped']+=1
+                        continue
+                    data=request(url,30*1024*1024)
+                    with Image.open(BytesIO(data)) as raw:
+                        im=ImageOps.exif_transpose(raw).convert('RGBA')
+                        im.thumbnail((480,480),Image.Resampling.LANCZOS)
+                        buf=BytesIO()
+                        im.save(buf,format='AVIF',quality=55,speed=6)
+                    blob=buf.getvalue()
+                    author=htmlmod.unescape(re.sub(r'<[^>]+>','',meta.get('Artist',{}).get('value',''))).strip()
+                    if license.startswith('cc by') and not author: continue
+                    m={'file':photo,'license':license,'source':source,'credit':('Wikimedia Commons - '+author+' - '+license+' - '+license_url(license)+' - redimensionnee et convertie en AVIF - '+source)[:700],'digest':hashlib.sha256(blob).hexdigest()}
+                    token=hashlib.sha256(photo.encode()).hexdigest()
+                    (cache/(token+'.avif')).write_bytes(blob)
+                    write_json(cache/(token+'.json'),m)
+                    publish(photo,m,blob)
+                    time.sleep(0.5)
+                except Exception as e:
+                    stats['commons_errors']+=1
+                    print('Commons image:',photo,str(e))
+                    if isinstance(e,urllib.error.HTTPError) and e.code in (429,503): return False
+            time.sleep(1)
+        return True
+    if process_files():
+        files.clear()
+        candidates,search_stats=search_missing_hardware(platforms,images,free_license,config)
+        stats.update(search_stats)
+        for name,photo in candidates: add(photo,name)
+        stats['commons_candidates']+=sum(map(len,files.values()))
+        process_files()
+    stats['hardware_with_photo']=sum(json.dumps(['hardware',p['name']],ensure_ascii=False,separators=(',',':')) in images for p in platforms if p.get('category')!='logiciel')
+    stats['hardware_without_photo']=sum(json.dumps(['hardware',p['name']],ensure_ascii=False,separators=(',',':')) not in images for p in platforms if p.get('category')!='logiciel')
     return stats
 
 def write_image_credits(out,images):
