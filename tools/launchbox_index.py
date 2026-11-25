@@ -11,7 +11,7 @@ FILE=re.compile(r'(?:r2_)?[a-z0-9_-]{10,120}\.(?:png|jpe?g|webp)',re.I)
 ALIASES={'3DO Interactive Multiplayer':'The 3DO Company - 3DO','Nintendo Game & Watch':'Handheld Electronic Game','Nintendo Famicom Disk System':'Nintendo - Family Computer Disk System','Sega Genesis':'Sega - Mega Drive - Genesis','Sega Master System':'Sega - Master System - Mark III','Sega CD':'Sega - Mega-CD - Sega CD','Sony PSP':'Sony - PlayStation Portable','Sony Playstation Vita':'Sony - PlayStation Portable Vita','Microsoft Xbox Series X/S':'Microsoft - Xbox Series','Atari 800':'Atari - 8-bit Family','SNK Neo Geo AES':'SNK - Neo Geo','NEC TurboGrafx-16':'NEC - PC Engine - TurboGrafx 16','NEC TurboGrafx-CD':'NEC - PC Engine CD - TurboGrafx-CD','PC Engine SuperGrafx':'NEC - PC Engine SuperGrafx','Mattel Intellivision':'Mattel - Intellivision','Magnavox Odyssey 2':'Magnavox - Odyssey2','Commodore Amiga CD32':'Commodore - CD32','BBC Microcomputer System':'Acorn - BBC Micro','Fujitsu FM Towns Marty':'Fujitsu - FM Towns','NEC PC-9801':'NEC - PC-98','Sinclair ZX-81':'Sinclair - ZX 81','Texas Instruments TI 99/4A':'Texas Instruments - TI-99_4A','WonderSwan':'Bandai - WonderSwan','WonderSwan Color':'Bandai - WonderSwan Color','Arcade':'MAME','Nintendo 64DD':'Nintendo - Nintendo 64DD'}
 
 def extract(src):
-    games={}; aliases=collections.defaultdict(set); media={}; counts=collections.Counter(); stack=[]
+    games={}; aliases=collections.defaultdict(set); media={}; counts=collections.Counter(); stack=[]; excluded=collections.defaultdict(list); release_types=collections.Counter()
     with zipfile.ZipFile(src) as z:
         info=z.getinfo('Metadata.xml')
         if info.file_size>2*1024**3: raise ValueError('Metadata.xml trop volumineux')
@@ -23,7 +23,11 @@ def extract(src):
                     id=e.findtext('DatabaseID') or ''
                     if e.tag=='Game' and id.isdigit():
                         n,p=e.findtext('Name'),e.findtext('Platform')
-                        if n and p and len(n)<=300 and len(p)<=150: games[id]=(p,n)
+                        release=(e.findtext('ReleaseType') or '').strip()
+                        release_types[release]+=1
+                        if n and p and len(n)<=300 and len(p)<=150:
+                            if re.search(r'\brom\s*hack\b|^hack$',release,re.I): excluded[p].append(n)
+                            else: games[id]=(p,n)
                     elif e.tag=='GameAlternateName' and id.isdigit():
                         n=e.findtext('AlternateName')
                         if n and len(n)<=300 and len(aliases[id])<16: aliases[id].add(n)
@@ -40,13 +44,14 @@ def extract(src):
         a=media.get(id,{})
         rows=sorted([[f,k,r] for (k,r),f in a.items()],key=lambda x:(x[1],0 if x[2] in ('Europe','North America','World','') else 1,x[2],x[0]))
         result[p].append([n,sorted(aliases.get(id,())),[x for x in rows if x[1]<4][:3]+[x for x in rows if x[1]>=4][:1]])
-    return {'schema':1,'archive_sha256':hashlib.file_digest(open(src,'rb'),'sha256').hexdigest(),'source_counts':dict(counts),'platforms':dict(result)}
+    return {'schema':2,'rom_hacks':dict(excluded),'release_types':dict(release_types),'archive_sha256':hashlib.file_digest(open(src,'rb'),'sha256').hexdigest(),'source_counts':dict(counts),'platforms':dict(result)}
 
 def load_index():
     supplied=ROOT/'tools'/'launchbox-index.json.gz'
-    cache=ROOT/'.rv-image-cache'/'launchbox-index-v1.json.gz'
+    cache=ROOT/'.rv-image-cache'/'launchbox-index-v2.json.gz'
     if supplied.is_file():
-        with gzip.open(supplied,'rt',encoding='utf-8') as f: return json.load(f),'uploaded-index'
+        with gzip.open(supplied,'rt',encoding='utf-8') as f: supplied_data=json.load(f)
+        if supplied_data.get('schema')==2: return supplied_data,'uploaded-index'
     if cache.is_file():
         with gzip.open(cache,'rt',encoding='utf-8') as f: data=json.load(f)
         if data.get('archive_sha256')==EXPECTED or time.time()-cache.stat().st_mtime<7*86400: return data,'cached-source'
@@ -70,11 +75,11 @@ def load_index():
     finally:
         archive.unlink(missing_ok=True)
 
-def apply_index(out,merged,platforms,base_title,norm,write_json):
+def apply_index(out,merged,platforms,base_title,norm,write_json,is_rom_hack):
     report={'launchbox_source':None,'launchbox_archive_matches_upload':False,'launchbox_matches':0,'launchbox_added_titles':0,'launchbox_image_references':0,'launchbox_platforms':0,'launchbox_unmapped_platforms':0,'launchbox_source_games':0}
     try: data,source=load_index()
     except Exception as e:
-        report['launchbox_error']=str(e); print(report['launchbox_error']); return {},report
+        report['launchbox_error']=str(e); print(report['launchbox_error']); return {},{},report
     report.update(launchbox_source=source,launchbox_archive_matches_upload=data.get('archive_sha256')==EXPECTED,launchbox_archive_sha256=data.get('archive_sha256'),launchbox_source_games=data.get('source_counts',{}).get('Game',0))
     system_names=set(merged)|{p['system'] for p in platforms if p.get('system')}
     targets=collections.defaultdict(set)
@@ -85,6 +90,7 @@ def apply_index(out,merged,platforms,base_title,norm,write_json):
         for a in [p.get('name',''),p.get('brand','')+' '+p.get('name','')]:
             if a.strip(): targets[norm(a)].add(sys)
     per=collections.defaultdict(list)
+    platform_to_system={}
     for platform,rows in data.get('platforms',{}).items():
         sys=ALIASES.get(platform)
         if sys not in system_names:
@@ -94,17 +100,34 @@ def apply_index(out,merged,platforms,base_title,norm,write_json):
             report['launchbox_unmapped_platforms']+=1
             continue
         per[sys].extend(rows)
+        platform_to_system[platform]=sys
+    blocked=collections.defaultdict(set)
+    for platform,titles in data.get('rom_hacks',{}).items():
+        sys=platform_to_system.get(platform)
+        if sys: blocked[sys].update(base_title(n) for n in titles)
+    report['launchbox_rom_hacks_excluded']=sum(len(v) for v in data.get('rom_hacks',{}).values())
+    report['launchbox_hacks_removed_from_catalog']=0
+    report['launchbox_aliases_grouped']=0
     output={}
+    groups={}
     for system,rows in sorted(per.items()):
         exact=collections.defaultdict(list)
+        alias_owners=collections.defaultdict(set)
+        canonical_keys={base_title(r[0]) for r in rows if isinstance(r,list) and len(r)==3 and isinstance(r[0],str) and not is_rom_hack(r[0])}
+        rejected=blocked[system]-canonical_keys
+        excluded={n for n in merged[system] if base_title(n) in rejected or is_rom_hack(n)}
+        merged[system].difference_update(excluded)
+        report['launchbox_hacks_removed_from_catalog']+=len(excluded)
         known={base_title(n) for n in merged[system]}
         for row in rows:
             if not isinstance(row,list) or len(row)!=3: continue
             title,aliases,media=row
-            if not isinstance(title,str) or not title or len(title)>300: continue
+            if not isinstance(title,str) or not title or len(title)>300 or is_rom_hack(title): continue
             keys={base_title(n) for n in [title,*aliases] if isinstance(n,str) and len(n)<=300}
             keys.discard('')
             if not keys: continue
+            canonical=base_title(title)
+            for k in keys: alias_owners[k].add(canonical)
             if not known.intersection(keys):
                 merged[system].add(title)
                 known.add(base_title(title))
@@ -112,6 +135,17 @@ def apply_index(out,merged,platforms,base_title,norm,write_json):
             valid=[m for m in media if isinstance(m,list) and len(m)==3 and isinstance(m[0],str) and FILE.fullmatch(m[0]) and m[1] in range(6) and isinstance(m[2],str)]
             if not valid: continue
             for k in keys: exact[k].append((title,valid))
+        alias_map={}
+        # Only explicitly documented names with a single canonical owner can be merged.
+        for k,owners in alias_owners.items():
+            if len(owners)==1 and k not in canonical_keys:
+                owner=next(iter(owners))
+                if owner!=k: alias_map[k]=owner
+        if alias_map:
+            path='data/groups/'+hashlib.sha256(system.encode()).hexdigest()[:16]+'.json'
+            write_json(out/path,alias_map)
+            groups[system]=path
+            report['launchbox_aliases_grouped']+=len(alias_map)
         index={}
         for title in sorted(merged[system]):
             hits=exact.get(base_title(title),[])
@@ -132,4 +166,4 @@ def apply_index(out,merged,platforms,base_title,norm,write_json):
         report['launchbox_matches']+=len(index)
         report['launchbox_image_references']+=sum(len(r) for r in index.values())
     report['launchbox_platforms']=len(output)
-    return output,report
+    return output,groups,report

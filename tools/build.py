@@ -35,14 +35,24 @@ def download(path):
 def extract_array(html,marker):
     start=html.index(marker)+len(marker)
     return json.JSONDecoder().raw_decode(html[start:])[0]
-def base_title(s):
-    # Remove known edition qualifiers only, never arbitrary subtitles.
+def is_rom_hack(n):
+    # Do not exclude legitimate titles like Hack// or Hack 'n' Slash.
+    if not isinstance(n,str): return False
+    return bool(re.search(r'\brom[\s_-]*hack(?:s|ed)?\b|\[(?:h|cr|m|p)\d*(?:\s+[^\]]*)?\]|\((?:hack(?:ed)?|rom hack|pirate|fan translation|translation patch|trainer)(?:\b[^)]*)?\)',n,re.I) or re.search(r'\bbanjo[\s-]*kazooie\s+ft\.?\s+minecraft\b',n,re.I))
+
+def catalog_title(s):
     while True:
-        new=re.sub(r'\s*\((?:USA|Europe|Japan|World|Asia|France|Germany|Spain|Italy|Australia|Brazil|Canada|Korea|China|Taiwan|Hong Kong|United Kingdom|En|Fr|De|Es|It|Ja|Rev [^)]*|v[0-9][^)]*|Beta[^)]*|Proto[^)]*|Demo[^)]*|Virtual Console|Switch Online)(?:\s*,\s*[^)]*)?\)\s*$','',s,flags=re.I)
+        new=re.sub(r'\s*\[(?:(?:cr|tr|t|f|h|m|p|o|u|v|b|a|c)\d*(?:\s+[^\]]*)?|!|T[+-][^\]]*|aka\s+[^\]]+)\]\s*$','',s,flags=re.I)
+        if new!=s: s=new; continue
+        new=re.sub(r'\s*\((?:(?:usa|europe|japan|world|asia|france|germany|spain|italy|australia|brazil|canada|korea|china|taiwan|hong kong|united kingdom|uk|netherlands|sweden|norway|denmark|finland|russia|portugal|greece|poland|argentina|mexico|scandinavia|latin america|unknown|unl|unlicensed)(?:\s*,\s*[^)]*)?|(?:en|fr|de|es|it|ja|ko|zh|pt|nl|sv|no|da|fi|ru|pl|cs|hu|el|tr|ar)(?:\s*,\s*(?:en|fr|de|es|it|ja|ko|zh|pt|nl|sv|no|da|fi|ru|pl|cs|hu|el|tr|ar))*|(?:rev(?:ision)?\b|v\d|version\s+\d|disc\s+\d|disk\s+\d|side\s+[ab]|tape\s+\d|proto(?:type)?\b|beta\b|alpha\b|demo\b|sample\b|preview\b|promo\b|virtual console\b|switch online\b|psn\b|eshop\b|digital\b|aftermarket\b|homebrew\b|bios\b|sgb enhanced\b|gb compatible\b|gba enhanced\b|nintendo power\b|\d{4}-\d\d-\d\d).*)\)\s*$','',s,flags=re.I)
         if new==s: break
         s=new
-    m=re.match(r'^(.*), (The|A|An)$',s,re.I)
-    return norm((m[2]+' '+m[1]) if m else s)
+    m=re.match(r'^(.*), (The|A|An)(?=\s*[-:]|$)(.*)$',s,re.I)
+    if m: s=m[2]+' '+m[1]+m[3]
+    s=''.join(c for c in unicodedata.normalize('NFKD',s.casefold()) if not unicodedata.combining(c)).replace('œ','oe').replace('æ','ae')
+    return ''.join(c for c in s if c.isalnum())
+
+def base_title(s): return catalog_title(s)
 def merge_launchbox(path,merged,platforms):
     # LaunchBox entries identify games, not precise physical editions. Do not fabricate editions.
     platformmap={}
@@ -297,8 +307,13 @@ def main():
                 if error: failed.append({'path':path,'error':error});continue
                 succeeded+=1; merged[Path(path).stem].update(names);count+=len(names)
         if not succeeded: raise RuntimeError('Aucun catalogue distant accessible. Déploiement interrompu.')
+    removed_hacks=0
+    for sys,names in merged.items():
+        excluded={n for n in names if is_rom_hack(n)}
+        names.difference_update(excluded)
+        removed_hacks+=len(excluded)
     lb=merge_launchbox(args.launchbox,merged,platforms) if args.launchbox else None
-    lbart,lb_stats=apply_index(out,merged,platforms,base_title,norm,write_json) if args.fetch else ({},{})
+    lbart,lb_groups,lb_stats=apply_index(out,merged,platforms,base_title,norm,write_json,is_rom_hack) if args.fetch else ({},{},{})
     count+=lb_stats.get('launchbox_added_titles',0)
     index={}
     for sys,names in sorted(merged.items()):
@@ -314,6 +329,7 @@ def main():
     art,art_stats=index_games(out,merged,base_title,write_json) if args.fetch else ({},{})
     media_report.update(art_stats)
     media_report.update(lb_stats)
+    media_report['rom_hacks_removed']=removed_hacks+lb_stats.get('launchbox_hacks_removed_from_catalog',0)
     covered=0
     covers=0
     grouped=0
@@ -327,20 +343,24 @@ def main():
         covered+=len(union)
         overlap+=len(set(lr)&set(launch)&names)
         covers+=sum(n in local or (n in lr and lr[n][0]==0) or any(row[1] in (0,1) for row in launch.get(n,[])) for n in union)
-        grouped+=len({base_title(n) for n in names})
-        grouped_covered+=len({base_title(n) for n in union})
+        aliases=read_json(out/lb_groups[sys]) if sys in lb_groups else {}
+        def group_key(n):
+            key=base_title(n)
+            return aliases.get(key,key)
+        grouped+=len({group_key(n) for n in names})
+        grouped_covered+=len({group_key(n) for n in union})
     media_report.update(game_editions_with_image_reference=covered,game_editions_with_cover_reference=covers,game_reference_overlap=overlap,game_title_groups=grouped,game_title_groups_with_image_reference=grouped_covered)
     total=sum(len(a) for a in merged.values())
     media_report['game_editions_without_image_reference']=total-covered
     report={'status':'fetched' if args.fetch else 'starter','platforms':len(index),'editions':total,'duplicate_entries_removed':max(0,count+(lb or {}).get('added_titles',0)-total),'sources_success':succeeded,'sources_failed':failed,'launchbox':lb,**media_report}
-    write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'art':art,'launchbox_art':lbart,'report':report})
+    write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'art':art,'launchbox_art':lbart,'groups':lb_groups,'report':report})
     write_json(out/'data/report.json',report)
     if out!=ROOT: shutil.copy2(ROOT/'index.html',out/'index.html')
     (out/'.nojekyll').touch()
     for _ in range(3):
         report['site_bytes']=sum(f.stat().st_size for f in out.rglob('*') if f.is_file())
         write_json(out/'data/report.json',report)
-        write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'art':art,'launchbox_art':lbart,'report':report})
+        write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'art':art,'launchbox_art':lbart,'groups':lb_groups,'report':report})
     print(json.dumps(report,ensure_ascii=False,indent=2))
     size=sum(f.stat().st_size for f in out.rglob('*') if f.is_file())
     if size>950_000_000: raise RuntimeError('Site supérieur à 950 Mo. Réduire les images ou choisir un hébergement adapté.')
