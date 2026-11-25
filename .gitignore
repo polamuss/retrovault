@@ -1,0 +1,9 @@
+*.zip
+Metadata.xml
+Metadata.zip
+RetroVault.json
+*collection*.json
+private/
+__pycache__/
+
+dist/
