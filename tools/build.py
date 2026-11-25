@@ -1,10 +1,11 @@
 """Build public RetroVault data. Run only on the maintainer/build machine, never in browsers.
 The image input is a whitelist of local files that the publisher is entitled to redistribute.
-No ROM downloads. No image search or bulk scraping.
+No ROM downloads. Only licensed hardware photos are published. Game indexes contain references, not copied artwork.
 """
 import argparse, concurrent.futures, hashlib, json, re, shutil, urllib.error, urllib.parse, urllib.request, unicodedata, xml.etree.ElementTree as ET, zipfile
 from collections import defaultdict
 from pathlib import Path
+from art_index import index_games, discover_hardware
 ROOT=Path(__file__).resolve().parents[1]
 BASE='https://raw.githubusercontent.com/libretro/libretro-database/master/'
 
@@ -144,6 +145,8 @@ def fetch_public_hardware(out, platforms, images):
         match=re.fullmatch(r'cc (by(?:-sa)?) ([1-4]\.[05])',license)
         return 'https://creativecommons.org/licenses/'+match[1]+'/'+match[2]+'/' if match else ''
 
+    mapping=read_json(ROOT/'tools'/'hardware-articles.json')
+    for name,photo in discover_hardware(platforms,mapping): add(photo,name)
     stats['commons_candidates']=sum(map(len,files.values()))
     def request(url,limit):
         req=urllib.request.Request(url,headers={'User-Agent':ua,'Accept':'*/*'})
@@ -290,12 +293,18 @@ def main():
         paths={v['path'] for v in images.values()}
         media_report.update(image_references=len(images),unique_images=len(paths),deduplicated_images=len(images)-len(paths),image_bytes=sum((out/p).stat().st_size for p in paths))
     write_image_credits(out,images)
+    art,art_stats=index_games(out,merged,base_title,write_json) if args.fetch else ({},{})
+    media_report.update(art_stats)
     total=sum(len(a) for a in merged.values())
     report={'status':'fetched' if args.fetch else 'starter','platforms':len(index),'editions':total,'duplicate_entries_removed':max(0,count+(lb or {}).get('added_titles',0)-total),'sources_success':succeeded,'sources_failed':failed,'launchbox':lb,**media_report}
-    write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'report':report})
+    write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'art':art,'report':report})
     write_json(out/'data/report.json',report)
     if out!=ROOT: shutil.copy2(ROOT/'index.html',out/'index.html')
     (out/'.nojekyll').touch()
+    for _ in range(3):
+        report['site_bytes']=sum(f.stat().st_size for f in out.rglob('*') if f.is_file())
+        write_json(out/'data/report.json',report)
+        write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'art':art,'report':report})
     print(json.dumps(report,ensure_ascii=False,indent=2))
     size=sum(f.stat().st_size for f in out.rglob('*') if f.is_file())
     if size>950_000_000: raise RuntimeError('Site supérieur à 950 Mo. Réduire les images ou choisir un hébergement adapté.')
