@@ -123,7 +123,7 @@ def index_games(out,merged,base_title,write_json):
             if priority!=0: counts[2]+=1
         digest=hashlib.sha256(system.encode()).hexdigest()[:16]
         path='data/art/'+digest+'.json'
-        write_json(out/path,{'repo':repo,'branch':branch,'rows':matches})
+        write_json(out/path,{'repo':repo,'branch':branch,'system':source_system,'rows':matches})
         return system,(path,counts)
     with concurrent.futures.ThreadPoolExecutor(max_workers=3) as pool:
         for system,row in pool.map(build,sorted(merged)):

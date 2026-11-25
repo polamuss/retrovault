@@ -6,9 +6,9 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 EXPECTED='a224502ef1be29494cb7c3705788c4731a9558a74dec8fdc81096a95c60dc8a5'
 URL='https://gamesdb.launchbox-app.com/Metadata.zip'
-TYPES={'Box - Front':0,'Box - Front - Reconstructed':1,'Cart - Front':2,'Advertisement Flyer - Front':3,'Screenshot - Game Title':4,'Screenshot - Gameplay':5}
+TYPES={'Box - Front':0,'Box - Front - Reconstructed':1,'Cart - Front':2,'Advertisement Flyer - Front':3,'Screenshot - Game Title':4,'Screenshot - Gameplay':5,'Box - 3D':6,'Cart - 3D':7}
 FILE=re.compile(r'(?:r2_)?[a-z0-9_-]{10,120}\.(?:png|jpe?g|webp)',re.I)
-ALIASES={'3DO Interactive Multiplayer':'The 3DO Company - 3DO','Nintendo Game & Watch':'Handheld Electronic Game','Nintendo Famicom Disk System':'Nintendo - Family Computer Disk System','Sega Genesis':'Sega - Mega Drive - Genesis','Sega Master System':'Sega - Master System - Mark III','Sega CD':'Sega - Mega-CD - Sega CD','Sony PSP':'Sony - PlayStation Portable','Sony Playstation Vita':'Sony - PlayStation Portable Vita','Microsoft Xbox Series X/S':'Microsoft - Xbox Series','Atari 800':'Atari - 8-bit Family','SNK Neo Geo AES':'SNK - Neo Geo','NEC TurboGrafx-16':'NEC - PC Engine - TurboGrafx 16','NEC TurboGrafx-CD':'NEC - PC Engine CD - TurboGrafx-CD','PC Engine SuperGrafx':'NEC - PC Engine SuperGrafx','Mattel Intellivision':'Mattel - Intellivision','Magnavox Odyssey 2':'Magnavox - Odyssey2','Commodore Amiga CD32':'Commodore - CD32','BBC Microcomputer System':'Acorn - BBC Micro','Fujitsu FM Towns Marty':'Fujitsu - FM Towns','NEC PC-9801':'NEC - PC-98','Sinclair ZX-81':'Sinclair - ZX 81','Texas Instruments TI 99/4A':'Texas Instruments - TI-99_4A','WonderSwan':'Bandai - WonderSwan','WonderSwan Color':'Bandai - WonderSwan Color','Arcade':'MAME','Nintendo 64DD':'Nintendo - Nintendo 64DD'}
+ALIASES={'3DO Interactive Multiplayer':'The 3DO Company - 3DO','Nintendo Game & Watch':'Handheld Electronic Game','Nintendo Famicom Disk System':'Nintendo - Family Computer Disk System','Sega Genesis':'Sega - Mega Drive - Genesis','Sega Master System':'Sega - Master System - Mark III','Sega CD':'Sega - Mega-CD - Sega CD','Sony PSP':'Sony - PlayStation Portable','Sony Playstation Vita':'Sony - PlayStation Portable Vita','Microsoft Xbox Series X/S':'Microsoft - Xbox Series','Atari 800':'Atari - 8-bit Family','SNK Neo Geo AES':'SNK - Neo Geo','NEC TurboGrafx-16':'NEC - PC Engine - TurboGrafx 16','NEC TurboGrafx-CD':'NEC - PC Engine CD - TurboGrafx-CD','PC Engine SuperGrafx':'NEC - PC Engine SuperGrafx','Mattel Intellivision':'Mattel - Intellivision','Magnavox Odyssey 2':'Magnavox - Odyssey2','Commodore Amiga CD32':'Commodore - CD32','BBC Microcomputer System':'Acorn - BBC Micro','Fujitsu FM Towns Marty':'Fujitsu - FM Towns','NEC PC-9801':'NEC - PC-98','Sinclair ZX-81':'Sinclair - ZX 81','Texas Instruments TI 99/4A':'Texas Instruments - TI-99_4A','WonderSwan':'Bandai - WonderSwan','WonderSwan Color':'Bandai - WonderSwan Color','Arcade':'MAME','Nintendo 64DD':'Nintendo - Nintendo 64DD','Arduboy':'Arduboy Inc - Arduboy','NEC PC-8801':'NEC - PC-88','Spectravideo':'Spectravideo - SVI-318 - SVI-328','Sony Playstation Vita':'Sony - PlayStation Vita','SNK Neo Geo MVS':'SNK - Neo Geo MVS'}
 
 def extract(src):
     games={}; aliases=collections.defaultdict(set); media={}; counts=collections.Counter(); stack=[]; excluded=collections.defaultdict(list); release_types=collections.Counter()
@@ -42,16 +42,17 @@ def extract(src):
     result=collections.defaultdict(list)
     for id,(p,n) in games.items():
         a=media.get(id,{})
-        rows=sorted([[f,k,r] for (k,r),f in a.items()],key=lambda x:(x[1],0 if x[2] in ('Europe','North America','World','') else 1,x[2],x[0]))
-        result[p].append([n,sorted(aliases.get(id,())),[x for x in rows if x[1]<4][:3]+[x for x in rows if x[1]>=4][:1]])
-    return {'schema':2,'rom_hacks':dict(excluded),'release_types':dict(release_types),'archive_sha256':hashlib.file_digest(open(src,'rb'),'sha256').hexdigest(),'source_counts':dict(counts),'platforms':dict(result)}
+        ranks={0:0,1:1,6:2,2:3,3:4,7:5,4:6,5:7}
+        rows=sorted([[f,k,r] for (k,r),f in a.items()],key=lambda x:(ranks[x[1]],0 if x[2] in ('Europe','North America','World','') else 1,0 if x[0].lower().endswith(('.jpg','.jpeg')) else 1,x[2],x[0]))
+        result[p].append([n,sorted(aliases.get(id,())),[x for x in rows if x[1] in (0,1)][:6]+[x for x in rows if x[1] in (2,3,6,7)][:3]+[x for x in rows if x[1] in (4,5)][:1]])
+    return {'schema':3,'rom_hacks':dict(excluded),'release_types':dict(release_types),'archive_sha256':hashlib.file_digest(open(src,'rb'),'sha256').hexdigest(),'source_counts':dict(counts),'platforms':dict(result)}
 
 def load_index():
     supplied=ROOT/'tools'/'launchbox-index.json.gz'
-    cache=ROOT/'.rv-image-cache'/'launchbox-index-v2.json.gz'
+    cache=ROOT/'.rv-image-cache'/'launchbox-index-v3.json.gz'
     if supplied.is_file():
         with gzip.open(supplied,'rt',encoding='utf-8') as f: supplied_data=json.load(f)
-        if supplied_data.get('schema')==2: return supplied_data,'uploaded-index'
+        if supplied_data.get('schema')==3: return supplied_data,'uploaded-index'
     if cache.is_file():
         with gzip.open(cache,'rt',encoding='utf-8') as f: data=json.load(f)
         if data.get('archive_sha256')==EXPECTED or time.time()-cache.stat().st_mtime<7*86400: return data,'cached-source'
@@ -132,7 +133,7 @@ def apply_index(out,merged,platforms,base_title,norm,write_json,is_rom_hack):
                 merged[system].add(title)
                 known.add(base_title(title))
                 report['launchbox_added_titles']+=1
-            valid=[m for m in media if isinstance(m,list) and len(m)==3 and isinstance(m[0],str) and FILE.fullmatch(m[0]) and m[1] in range(6) and isinstance(m[2],str)]
+            valid=[m for m in media if isinstance(m,list) and len(m)==3 and isinstance(m[0],str) and FILE.fullmatch(m[0]) and m[1] in range(8) and isinstance(m[2],str)]
             if not valid: continue
             for k in keys: exact[k].append((title,valid))
         alias_map={}
@@ -151,14 +152,15 @@ def apply_index(out,merged,platforms,base_title,norm,write_json,is_rom_hack):
             hits=exact.get(base_title(title),[])
             if not hits: continue
             # Ambiguous alternate-name matches are not silently merged.
-            canonical=[h for h in hits if norm(h[0])==norm(title)]
+            canonical=[h for h in hits if base_title(h[0])==base_title(title)]
             if canonical: hits=canonical
-            if len({norm(h[0]) for h in hits})!=1: continue
+            if len({base_title(h[0]) for h in hits})!=1: continue
             images=[]
             for _,media in hits:
                 for img in media:
                     if img not in images: images.append(img)
-            index[title]=sorted(images,key=lambda x:(x[1],x[2],x[0]))[:5]
+            ranks={0:0,1:1,6:2,2:3,3:4,7:5,4:6,5:7}
+            index[title]=sorted(images,key=lambda x:(ranks[x[1]],0 if x[0].lower().endswith(('.jpg','.jpeg')) else 1,x[2],x[0]))[:10]
         if not index: continue
         path='data/launchbox/'+hashlib.sha256(system.encode()).hexdigest()[:16]+'.json'
         write_json(out/path,index)
