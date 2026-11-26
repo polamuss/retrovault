@@ -10,7 +10,7 @@ def build_fixed_photos(out, folder, platforms, images):
     errors=[]
     for file in sorted(folder.glob('*.json')):
         try:
-            if file.stat().st_size>2_000_000: raise ValueError('fichier trop volumineux')
+            if file.stat().st_size>32_000_000: raise ValueError('fichier JSON supérieur à 32 Mo')
             row=json.loads(file.read_text(encoding='utf-8'))
             name=row.get('name')
             if not isinstance(name,str) or name not in known: raise ValueError('matériel inconnu')
@@ -22,7 +22,9 @@ def build_fixed_photos(out, folder, platforms, images):
             if not isinstance(value,str): raise ValueError('image invalide')
             match=re.fullmatch(r'data:image/(jpeg|png|webp);base64,([A-Za-z0-9+/=]+)',value)
             if not match: raise ValueError('format invalide')
-            with Image.open(BytesIO(base64.b64decode(match[2],validate=True))) as raw:
+            binary=base64.b64decode(match[2],validate=True)
+            if len(binary)>24_000_000: raise ValueError('photo source supérieure à 24 Mo')
+            with Image.open(BytesIO(binary)) as raw:
                 if raw.format not in ('JPEG','PNG','WEBP') or raw.width*raw.height>40_000_000: raise ValueError('format ou taille invalide')
                 im=ImageOps.exif_transpose(raw).convert('RGBA')
                 im.thumbnail((480,480),Image.Resampling.LANCZOS)
