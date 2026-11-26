@@ -120,8 +120,11 @@ def apply_image_exclusions(out, overrides, images, source_indexes):
                 continue
             rows = payload.get("rows", {}) if source == "libretro" else payload
             if isinstance(rows, dict) and title in rows:
-                del rows[title]
-                stats["catalog_image_references_removed"] += 1
+                removed = rows.pop(title)
+                if source == "libretro":
+                    stats["catalog_image_references_removed"] += 1
+                else:
+                    stats["catalog_image_references_removed"] += len(removed) if isinstance(removed, list) else 1
                 if source == "libretro":
                     payload["rows"] = rows
                 file.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
