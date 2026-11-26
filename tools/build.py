@@ -320,7 +320,7 @@ def main():
         removed_hacks+=len(excluded)
     lb=merge_launchbox(args.launchbox,merged,platforms) if args.launchbox else None
     lbart,lb_groups,lb_stats=apply_index(out,merged,platforms,base_title,norm,write_json,is_rom_hack) if args.fetch else ({},{},{})
-    count+=lb_stats.get('launchbox_added_titles',0)
+    count+=(lb or {}).get('added_titles',0)+lb_stats.get('launchbox_added_titles',0)
     overrides=load_overrides()
     override_stats=apply_catalog_overrides(merged,overrides)
     renamed_pairs=override_stats.pop('catalog_renamed_pairs',[])
