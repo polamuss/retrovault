@@ -7,3 +7,12 @@ private/
 __pycache__/
 
 dist/
+
+# Credentials and private configuration
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.json
+credentials.json

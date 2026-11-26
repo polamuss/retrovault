@@ -5,18 +5,20 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
-  pages: write
-  id-token: write
 concurrency:
   group: pages
   cancel-in-progress: true
 jobs:
   build:
+    permissions:
+      contents: read
+      pages: read
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
-      - uses: actions/configure-pages@v5
       - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -31,10 +33,19 @@ jobs:
       - run: python tools/build.py --fetch --output dist
         env:
           GITHUB_TOKEN: ${{ github.token }}
+      - name: Verifier l absence de secrets dans le site public
+        run: python tools/check_public_secrets.py dist
+        env:
+          RV_CHECK_IGDB_ID: ${{ secrets.IGDB_CLIENT_ID }}
+          RV_CHECK_IGDB_SECRET: ${{ secrets.IGDB_CLIENT_SECRET }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
   deploy:
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
     needs: build
     runs-on: ubuntu-latest
     environment:

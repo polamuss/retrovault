@@ -53,3 +53,7 @@ La version conserve les outils d'identification et les informations techniques. 
 ## État de validation
 
 Les données initiales ont été construites localement. Le téléchargement complet des sources, l'import du véritable fichier LaunchBox et le déploiement GitHub Pages ne sont pas vérifiés ici. Aucune image publique n'est incluse dans la version initiale. Les photos personnelles importées gardent leurs octets d'origine (formats JPEG, PNG et WebP, limite de 20 Mio par fichier), sauf rotation explicite, réalisée en PNG.
+
+## Sécurité des identifiants API
+
+Ne jamais enregistrer un Client Secret, un jeton OAuth ou une clé API dans le dépôt, le HTML, le cache Actions ou les données publiées. Les identifiants IGDB doivent être gérés par un administrateur éligible aux conditions développeur Twitch. Un secret communiqué dans une conversation ou dans un fichier doit être renouvelé avant utilisation. Les secrets GitHub Actions `IGDB_CLIENT_ID` et `IGDB_CLIENT_SECRET` ne sont actuellement utilisés que par le contrôle de non-divulgation du site généré. L'accès API IGDB n'est pas activé. Les permissions de publication Pages sont limitées au job de déploiement, et les identifiants Git ne sont pas conservés après le checkout.
