@@ -1,5 +1,7 @@
 """Persistent, reviewed catalogue corrections shared by every published visitor."""
 import json
+import re
+import unicodedata
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -60,6 +62,11 @@ def _key(row):
     return system, title
 
 
+def _title_key(value):
+    text = unicodedata.normalize("NFKD", str(value)).encode("ascii", "ignore").decode("ascii").casefold()
+    return re.sub(r"[^a-z0-9]", "", text)
+
+
 def apply_catalog_overrides(merged, overrides):
     """Apply exact platform/title corrections after catalogue enrichment and before remaining indexes."""
     stats = {"catalog_excluded_titles": 0, "catalog_renamed_titles": 0, "catalog_renamed_pairs": []}
@@ -68,7 +75,7 @@ def apply_catalog_overrides(merged, overrides):
         names = merged.get(system)
         if names is None:
             continue
-        matches = [name for name in names if name.casefold() == title.casefold()]
+        matches = [name for name in names if _title_key(name) == _title_key(title)]
         if len(matches) == 1:
             names.remove(matches[0])
             stats["catalog_excluded_titles"] += 1
@@ -78,7 +85,7 @@ def apply_catalog_overrides(merged, overrides):
         names = merged.get(system)
         if names is None:
             continue
-        matches = [name for name in names if name.casefold() == old.casefold()]
+        matches = [name for name in names if _title_key(name) == _title_key(old)]
         if len(matches) != 1:
             continue
         names.remove(matches[0])
@@ -101,11 +108,15 @@ def apply_image_exclusions(out, overrides, images, source_indexes):
         by_key.setdefault(key, set()).add(row.get("source", "all"))
 
     for (system, title), sources in by_key.items():
-        key = json.dumps([system, title], ensure_ascii=False, separators=(",", ":"))
         if "all" in sources or "fixed" in sources:
-            if key in images:
-                del images[key]
-                stats["catalog_image_references_removed"] += 1
+            for image_key in list(images):
+                try:
+                    image_system, image_title = json.loads(image_key)
+                except (TypeError, ValueError):
+                    continue
+                if image_system == system and _title_key(image_title) == _title_key(title):
+                    del images[image_key]
+                    stats["catalog_image_references_removed"] += 1
         for source in ("libretro", "launchbox", "gametdb", "openvgdb"):
             if "all" not in sources and source not in sources:
                 continue
@@ -119,12 +130,13 @@ def apply_image_exclusions(out, overrides, images, source_indexes):
             except (OSError, ValueError):
                 continue
             rows = payload.get("rows", {}) if source == "libretro" else payload
-            if isinstance(rows, dict) and title in rows:
-                removed = rows.pop(title)
+            matching_titles = [name for name in rows if _title_key(name) == _title_key(title)] if isinstance(rows, dict) else []
+            if matching_titles:
+                removed = [rows.pop(name) for name in matching_titles]
                 if source == "libretro":
-                    stats["catalog_image_references_removed"] += 1
+                    stats["catalog_image_references_removed"] += len(removed)
                 else:
-                    stats["catalog_image_references_removed"] += len(removed) if isinstance(removed, list) else 1
+                    stats["catalog_image_references_removed"] += sum(len(value) if isinstance(value, list) else 1 for value in removed)
                 if source == "libretro":
                     payload["rows"] = rows
                 file.write_text(json.dumps(payload, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
