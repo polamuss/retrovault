@@ -34,6 +34,14 @@ class OverrideTests(unittest.TestCase):
             self.assertIn('["NES","Game"]',images)
             self.assertEqual(stats["catalog_image_references_removed"],1)
 
+    def test_punctuation_variants_match_reviewed_title(self):
+        overrides={"excluded":[{"system":"Emerson","title":"Geometrydash"}],
+                   "title_overrides":[],"image_exclusions":[]}
+        merged={"Emerson":{"Geometry Dash","Other"}}
+        stats=apply_catalog_overrides(merged,overrides)
+        self.assertEqual(merged["Emerson"],{"Other"})
+        self.assertEqual(stats["catalog_excluded_titles"],1)
+
     def test_unknown_image_source_is_rejected(self):
         data={"version":1,"excluded":[],"title_overrides":[],
               "image_exclusions":[{"system":"NES","title":"Game","source":"unknown"}]}
