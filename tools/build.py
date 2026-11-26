@@ -333,7 +333,6 @@ def main():
         media_report.update(fetch_public_hardware(out,platforms,images))
     paths={v['path'] for v in images.values()}
     media_report.update(image_references=len(images),unique_images=len(paths),deduplicated_images=len(images)-len(paths),image_bytes=sum((out/p).stat().st_size for p in paths))
-    write_image_credits(out,images)
     art,art_stats=index_games(out,merged,base_title,write_json) if args.fetch else ({},{})
     gtdb,gtdb_stats=index_gametdb(out,merged,base_title,write_json) if args.fetch else ({},{})
     media_report.update(art_stats)
@@ -344,6 +343,16 @@ def main():
     source_indexes={'art':art,'launchbox_art':lbart,'gametdb_art':gtdb,'openvgdb_art':ovdb}
     media_report.update(override_stats)
     media_report.update(apply_image_exclusions(out,overrides,images,source_indexes))
+    # Recount after moderation so image statistics describe only published references.
+    paths={v['path'] for v in images.values()}
+    media_report.update(image_references=len(images),unique_images=len(paths),
+                        deduplicated_images=len(images)-len(paths),
+                        image_bytes=sum((out/p).stat().st_size for p in paths))
+    write_image_credits(out,images)
+    used_media={v['path'] for v in images.values()}
+    for file in (out/'media').iterdir():
+        if file.is_file() and 'media/'+file.name not in used_media:
+            file.unlink()
     write_json(out/'data/catalog-overrides.json',overrides)
     media_report['rom_hacks_removed']=removed_hacks+lb_stats.get('launchbox_hacks_removed_from_catalog',0)
     covered=0
