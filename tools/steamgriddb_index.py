@@ -8,13 +8,14 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections import defaultdict
+from collections import defaultdict, Counter, deque
 from pathlib import Path
 from build import base_title
 
 API='https://www.steamgriddb.com/api/v2/'
 CACHE=Path('.rv-image-cache/steamgriddb-links-v1.json')
-MAX_TITLES=25
+MAX_TITLES=150
+MAX_SECONDS=600
 HOSTS={'cdn.steamgriddb.com','cdn2.steamgriddb.com'}
 class StopLookup(Exception): pass
 class NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -45,14 +46,23 @@ def api(path,key):
         if e.code==404: return []
         raise StopLookup() from None
     except (OSError,ValueError): raise StopLookup() from None
-def find(title,key):
+def find(title,key,stats):
     data=api('search/autocomplete/'+urllib.parse.quote(title,safe=''),key)
-    if not isinstance(data,list): return []
+    if not isinstance(data,list):
+        stats['invalid_search_response']+=1
+        return []
     hits=[g for g in data if isinstance(g,dict) and isinstance(g.get('name'),str) and base_title(g['name'])==base_title(title) and type(g.get('id')) is int]
-    if len({g['id'] for g in hits})!=1: return []
+    if not hits:
+        stats['no_exact_title']+=1
+        return []
+    if len({g['id'] for g in hits})!=1:
+        stats['ambiguous_title']+=1
+        return []
     id=hits[0]['id']
-    data=api('grids/game/'+str(id)+'?dimensions=600x900,342x482&types=static&nsfw=false&humor=false&epilepsy=false',key)
-    if not isinstance(data,list): return []
+    data=api('grids/game/'+str(id)+'?dimensions=600x900,342x482,660x930&types=static&nsfw=false&humor=false&epilepsy=false',key)
+    if not isinstance(data,list) or not data:
+        stats['no_grid']+=1
+        return []
     results=[]
     for g in data:
         if not isinstance(g,dict) or g.get('nsfw') is not False or g.get('humor') is not False or g.get('epilepsy') is True: continue
@@ -61,6 +71,7 @@ def find(title,key):
         url=public_image(g.get('thumb')) or public_image(g.get('url'))
         if url and url not in results: results.append(url)
         if len(results)>=2: break
+    stats['accepted' if results else 'grid_rejected']+=1
     return results
 def main():
     out=Path(sys.argv[1])
@@ -96,16 +107,27 @@ def main():
             title=min(versions,key=lambda n:(len(n),n))
             title=re.sub(r'(?:\s*(?:\([^()]*\)|\[[^\[\]]*\]))+$','',title).strip()
             if base_title(title)!=group: continue
+            if re.search(r'\b(?:demo|prototype|beta|sample|test program|bios|firmware|trainer|rom hack)\b',title,re.I): continue
             jobs.append((system,group,title))
+    # Spread the sample over all platforms instead of exhausting the first one.
+    batches=defaultdict(deque)
+    for system,group,title in jobs: batches[system].append((system,group,title))
+    ordered=[]
+    while batches:
+        for system in list(batches):
+            ordered.append(batches[system].popleft())
+            if not batches[system]: del batches[system]
     attempted=0
     stopped=False
+    stats=Counter()
+    deadline=time.monotonic()+MAX_SECONDS
     if key:
-        for system,group,title in jobs:
+        for system,group,title in ordered:
             token=system+'|'+group
             if token in cached: continue
-            if attempted>=MAX_TITLES: break
+            if attempted>=MAX_TITLES or time.monotonic()>=deadline: break
             attempted+=1
-            try: cached[token]=find(title,key)
+            try: cached[token]=find(title,key,stats)
             except StopLookup:
                 stopped=True
                 break
@@ -134,7 +156,7 @@ def main():
             editions+=len(rows)
             groups_added+=len(groups)
     index['steamgriddb_art']=paths
-    report.update(steamgriddb_additional_editions=editions,steamgriddb_additional_groups=groups_added,steamgriddb_lookups_this_run=attempted,steamgriddb_api_stopped=stopped)
+    report.update(steamgriddb_additional_editions=editions,steamgriddb_additional_groups=groups_added,steamgriddb_lookups_this_run=attempted,steamgriddb_api_stopped=stopped,steamgriddb_lookup_results=dict(stats),steamgriddb_eligible_titles=len(jobs))
     report['game_editions_with_image_reference']+=editions
     report['game_editions_without_image_reference']-=editions
     report['game_title_groups_with_image_reference']+=groups_added
@@ -143,6 +165,7 @@ def main():
         index['report']=report
         write(out/'data/index.json',index)
         write(out/'data/report.json',report)
+    print('SteamGridDB diagnostics: '+json.dumps(dict(stats),sort_keys=True))
     print('SteamGridDB: '+str(attempted)+' titres interrogés, '+str(groups_added)+' groupes supplémentaires. Arrêt API: '+str(stopped))
     if report['site_bytes']>950_000_000: raise SystemExit('Site trop volumineux')
 if __name__=='__main__': main()
