@@ -57,7 +57,7 @@ Structure du fichier :
 }
 ```
 
-Les exclusions et corrections de titre utilisent le couple exact plateforme/titre. Les exclusions d'images acceptent `all`, `fixed`, `libretro`, `launchbox`, `gametdb`, `openvgdb`, `steamgriddb` ou `igdb`. Retirer une image ne supprime pas le jeu. Une correction de titre est appliquée avant la construction des index de sources.
+Les exclusions et corrections de titre utilisent la plateforme exacte et un titre normalisé (casse, espaces et ponctuation). Les exclusions d'images acceptent `all`, `fixed`, `libretro`, `launchbox`, `gametdb`, `openvgdb`, `steamgriddb` ou `igdb`. Retirer une image ne supprime pas le jeu. Une correction de titre est appliquée après l'enrichissement LaunchBox, puis propagée à son index et aux index générés ensuite.
 
 ## Sources d'images
 
