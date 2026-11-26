@@ -319,10 +319,27 @@ def main():
         names.difference_update(excluded)
         removed_hacks+=len(excluded)
     lb=merge_launchbox(args.launchbox,merged,platforms) if args.launchbox else None
-    overrides=load_overrides()
-    override_stats=apply_catalog_overrides(merged,overrides)
     lbart,lb_groups,lb_stats=apply_index(out,merged,platforms,base_title,norm,write_json,is_rom_hack) if args.fetch else ({},{},{})
     count+=lb_stats.get('launchbox_added_titles',0)
+    overrides=load_overrides()
+    override_stats=apply_catalog_overrides(merged,overrides)
+    renamed_pairs=override_stats.pop('catalog_renamed_pairs',[])
+    for system,old_title,new_title in renamed_pairs:
+        path=lbart.get(system)
+        if path:
+            rows=read_json(out/path)
+            if old_title in rows:
+                rows[new_title]=rows.pop(old_title)
+                write_json(out/path,rows)
+        group_path=lb_groups.get(system)
+        if group_path:
+            aliases=read_json(out/group_path)
+            old_key,new_key=base_title(old_title),base_title(new_title)
+            if old_key in aliases:
+                aliases[new_key]=aliases.pop(old_key)
+            for alias,value in list(aliases.items()):
+                if value==old_key: aliases[alias]=new_key
+            write_json(out/group_path,aliases)
     raw_entry_count=count
     index={}
     for sys,names in sorted(merged.items()):
