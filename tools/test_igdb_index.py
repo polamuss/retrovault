@@ -11,6 +11,10 @@ class IGDBTests(unittest.TestCase):
              patch.object(igdb, "_token", side_effect=AssertionError("network must not be used")):
             self.assertEqual(igdb.main(),0)
 
+    def test_search_title_strips_region_without_dropping_subtitles(self):
+        self.assertEqual(igdb._search_title('DOOM (USA)'), 'DOOM')
+        self.assertEqual(igdb._search_title('Game (Special Edition)'), 'Game (Special Edition)')
+
     def test_exact_platform_and_short_title(self):
         rows=[{"id":1,"name":"DOOM","platforms":[{"name":"Nintendo Entertainment System"}],
                "cover":{"image_id":"cover_123"}}]
