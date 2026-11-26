@@ -62,7 +62,7 @@ def _key(row):
 
 def apply_catalog_overrides(merged, overrides):
     """Apply exact platform/title corrections before indexing any artwork source."""
-    stats = {"catalog_excluded_titles": 0, "catalog_renamed_titles": 0}
+    stats = {"catalog_excluded_titles": 0, "catalog_renamed_titles": 0, "catalog_renamed_pairs": []}
     excluded = [(r["system"], r["title"]) for r in overrides["excluded"]]
     for system, title in excluded:
         names = merged.get(system)
@@ -84,6 +84,7 @@ def apply_catalog_overrides(merged, overrides):
         names.remove(matches[0])
         names.add(new)
         stats["catalog_renamed_titles"] += 1
+        stats["catalog_renamed_pairs"].append([system, matches[0], new])
     return stats
 
 
