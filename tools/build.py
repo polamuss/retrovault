@@ -9,6 +9,7 @@ from art_index import index_games, discover_hardware, search_missing_hardware
 from launchbox_index import apply_index
 from fixed_photos import build_fixed_photos
 from gametdb_index import index_gametdb
+from openvgdb_index import index_openvgdb
 ROOT=Path(__file__).resolve().parents[1]
 BASE='https://raw.githubusercontent.com/libretro/libretro-database/master/'
 
@@ -334,10 +335,16 @@ def main():
     media_report.update(art_stats)
     media_report.update(lb_stats)
     media_report.update(gtdb_stats)
+    ovdb,ov_stats=index_openvgdb(out,merged,base_title,write_json) if args.fetch else ({},{})
+    media_report.update(ov_stats)
     media_report['rom_hacks_removed']=removed_hacks+lb_stats.get('launchbox_hacks_removed_from_catalog',0)
     covered=0
     gametdb_only=0
+    ovdb_only=0
+    ovdb_group_only=0
     covers=0
+    system_counts={}
+    snapshot={}
     grouped=0
     grouped_covered=0
     overlap=0
@@ -346,7 +353,10 @@ def main():
         launch=read_json(out/lbart[sys]) if sys in lbart else {}
         local={json.loads(k)[1] for k in images if json.loads(k)[0]==sys}
         third=read_json(out/gtdb[sys]) if sys in gtdb else {}
-        union=(set(lr)|set(launch)|set(third)|local)&names
+        fourth=read_json(out/ovdb[sys]) if sys in ovdb else {}
+        before=(set(lr)|set(launch)|set(third)|local)&names
+        union=(before|set(fourth))&names
+        ovdb_only+=len(union-before)
         covered+=len(union)
         gametdb_only+=len((set(third)-set(lr)-set(launch)-local)&names)
         overlap+=len(set(lr)&set(launch)&names)
@@ -355,21 +365,31 @@ def main():
         def group_key(n):
             key=base_title(n)
             return aliases.get(key,key)
-        grouped+=len({group_key(n) for n in names})
+        keys={group_key(n) for n in names}
+        grouped+=len(keys)
         grouped_covered+=len({group_key(n) for n in union})
+        ovdb_group_only+=len({group_key(n) for n in union}-{group_key(n) for n in before})
+        if names:
+            system_counts[sys]={'games':len(keys),'editions':len(names)}
+            snapshot[sys]=[sorted(names,key=lambda x:(x.casefold(),x)),aliases]
     media_report.update(game_editions_with_image_reference=covered,game_editions_with_cover_reference=covers,game_reference_overlap=overlap,game_title_groups=grouped,game_title_groups_with_image_reference=grouped_covered)
     total=sum(len(a) for a in merged.values())
     media_report['gametdb_additional_reference_matches']=gametdb_only
+    media_report['openvgdb_additional_reference_matches']=ovdb_only
+    media_report['openvgdb_additional_title_groups']=ovdb_group_only
+    snapshot_bytes=json.dumps(snapshot,ensure_ascii=False,separators=(',',':')).encode('utf-8')
+    snapshot_path='data/catalog/all-'+hashlib.sha256(snapshot_bytes).hexdigest()[:24]+'.json'
+    (out/snapshot_path).write_bytes(snapshot_bytes)
     media_report['game_editions_without_image_reference']=total-covered
     report={'status':'fetched' if args.fetch else 'starter','platforms':len(index),'editions':total,'duplicate_entries_removed':max(0,count+(lb or {}).get('added_titles',0)-total),'sources_success':succeeded,'sources_failed':failed,'launchbox':lb,**media_report}
-    write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'art':art,'launchbox_art':lbart,'gametdb_art':gtdb,'groups':lb_groups,'report':report})
+    write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'art':art,'launchbox_art':lbart,'gametdb_art':gtdb,'openvgdb_art':ovdb,'groups':lb_groups,'system_counts':system_counts,'catalog_snapshot':snapshot_path,'report':report})
     write_json(out/'data/report.json',report)
     if out!=ROOT: shutil.copy2(ROOT/'index.html',out/'index.html')
     (out/'.nojekyll').touch()
     for _ in range(3):
         report['site_bytes']=sum(f.stat().st_size for f in out.rglob('*') if f.is_file())
         write_json(out/'data/report.json',report)
-        write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'art':art,'launchbox_art':lbart,'gametdb_art':gtdb,'groups':lb_groups,'report':report})
+        write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'art':art,'launchbox_art':lbart,'gametdb_art':gtdb,'openvgdb_art':ovdb,'groups':lb_groups,'system_counts':system_counts,'catalog_snapshot':snapshot_path,'report':report})
     print(json.dumps(report,ensure_ascii=False,indent=2))
     size=sum(f.stat().st_size for f in out.rglob('*') if f.is_file())
     if size>950_000_000: raise RuntimeError('Site supérieur à 950 Mo. Réduire les images ou choisir un hébergement adapté.')

@@ -27,7 +27,7 @@ jobs:
           path: .rv-image-cache
           key: retrovault-media-v1-${{ github.run_id }}
           restore-keys: retrovault-media-v1-
-      - run: python -m py_compile tools/build.py tools/art_index.py tools/launchbox_index.py tools/fixed_photos.py tools/gametdb_index.py
+      - run: python -m py_compile tools/build.py tools/art_index.py tools/launchbox_index.py tools/fixed_photos.py tools/gametdb_index.py tools/openvgdb_index.py
       - run: python tools/build.py --fetch --output dist
         env:
           GITHUB_TOKEN: ${{ github.token }}
