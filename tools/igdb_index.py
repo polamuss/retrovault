@@ -14,7 +14,8 @@ from build import base_title
 
 API = "https://api.igdb.com/v4/games"
 TOKEN_API = "https://id.twitch.tv/oauth2/token"
-CACHE = Path(".rv-image-cache/igdb-links-v1.json")
+ROOT = Path(__file__).resolve().parents[1]
+CACHE = ROOT / ".rv-image-cache" / "igdb-links-v1.json"
 MAX_TITLES = 300
 MAX_REQUESTS = 450
 MAX_SECONDS = 720
@@ -105,7 +106,7 @@ def _search_title(title):
 def _query(title):
     safe = title.replace("\\", " ").replace('"', " ").replace(";", " ")
     return ('search "' + safe + '"; fields id,name,first_release_date,'
-            'platforms.name,alternative_names.name,cover.image_id; limit 10;')
+            'platforms.name,alternative_names.name,cover.image_id; limit 50;')
 
 
 def _request(title, client_id, token, stats):
@@ -294,7 +295,7 @@ def main():
                 cached[system + "|" + group] = {"image_id": image_id, "checked": now}
                 if url:
                     stats["matched_groups"] += 1
-                if attempted % 10 == 0:
+                if attempted % 1 == 0:
                     CACHE.parent.mkdir(parents=True, exist_ok=True)
                     CACHE.write_text(json.dumps(cached, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
             except Exception:
