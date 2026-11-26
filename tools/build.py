@@ -8,6 +8,7 @@ from pathlib import Path
 from art_index import index_games, discover_hardware, search_missing_hardware
 from launchbox_index import apply_index
 from fixed_photos import build_fixed_photos
+from gametdb_index import index_gametdb
 ROOT=Path(__file__).resolve().parents[1]
 BASE='https://raw.githubusercontent.com/libretro/libretro-database/master/'
 
@@ -329,10 +330,13 @@ def main():
     media_report.update(image_references=len(images),unique_images=len(paths),deduplicated_images=len(images)-len(paths),image_bytes=sum((out/p).stat().st_size for p in paths))
     write_image_credits(out,images)
     art,art_stats=index_games(out,merged,base_title,write_json) if args.fetch else ({},{})
+    gtdb,gtdb_stats=index_gametdb(out,merged,base_title,write_json) if args.fetch else ({},{})
     media_report.update(art_stats)
     media_report.update(lb_stats)
+    media_report.update(gtdb_stats)
     media_report['rom_hacks_removed']=removed_hacks+lb_stats.get('launchbox_hacks_removed_from_catalog',0)
     covered=0
+    gametdb_only=0
     covers=0
     grouped=0
     grouped_covered=0
@@ -341,8 +345,10 @@ def main():
         lr=read_json(out/art[sys]).get('rows',{}) if sys in art else {}
         launch=read_json(out/lbart[sys]) if sys in lbart else {}
         local={json.loads(k)[1] for k in images if json.loads(k)[0]==sys}
-        union=(set(lr)|set(launch)|local)&names
+        third=read_json(out/gtdb[sys]) if sys in gtdb else {}
+        union=(set(lr)|set(launch)|set(third)|local)&names
         covered+=len(union)
+        gametdb_only+=len((set(third)-set(lr)-set(launch)-local)&names)
         overlap+=len(set(lr)&set(launch)&names)
         covers+=sum(n in local or (n in lr and lr[n][0]==0) or any(row[1] in (0,1) for row in launch.get(n,[])) for n in union)
         aliases=read_json(out/lb_groups[sys]) if sys in lb_groups else {}
@@ -353,16 +359,17 @@ def main():
         grouped_covered+=len({group_key(n) for n in union})
     media_report.update(game_editions_with_image_reference=covered,game_editions_with_cover_reference=covers,game_reference_overlap=overlap,game_title_groups=grouped,game_title_groups_with_image_reference=grouped_covered)
     total=sum(len(a) for a in merged.values())
+    media_report['gametdb_additional_reference_matches']=gametdb_only
     media_report['game_editions_without_image_reference']=total-covered
     report={'status':'fetched' if args.fetch else 'starter','platforms':len(index),'editions':total,'duplicate_entries_removed':max(0,count+(lb or {}).get('added_titles',0)-total),'sources_success':succeeded,'sources_failed':failed,'launchbox':lb,**media_report}
-    write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'art':art,'launchbox_art':lbart,'groups':lb_groups,'report':report})
+    write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'art':art,'launchbox_art':lbart,'gametdb_art':gtdb,'groups':lb_groups,'report':report})
     write_json(out/'data/report.json',report)
     if out!=ROOT: shutil.copy2(ROOT/'index.html',out/'index.html')
     (out/'.nojekyll').touch()
     for _ in range(3):
         report['site_bytes']=sum(f.stat().st_size for f in out.rglob('*') if f.is_file())
         write_json(out/'data/report.json',report)
-        write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'art':art,'launchbox_art':lbart,'groups':lb_groups,'report':report})
+        write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'art':art,'launchbox_art':lbart,'gametdb_art':gtdb,'groups':lb_groups,'report':report})
     print(json.dumps(report,ensure_ascii=False,indent=2))
     size=sum(f.stat().st_size for f in out.rglob('*') if f.is_file())
     if size>950_000_000: raise RuntimeError('Site supérieur à 950 Mo. Réduire les images ou choisir un hébergement adapté.')

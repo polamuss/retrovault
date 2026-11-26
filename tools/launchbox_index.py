@@ -111,6 +111,10 @@ def apply_index(out,merged,platforms,base_title,norm,write_json,is_rom_hack):
     report['launchbox_aliases_grouped']=0
     output={}
     groups={}
+    digital=re.compile(r' \((?:Digital|PSN|Games on Demand|Download Play)\)$',re.I)
+    for sys in sorted(system_names):
+        base=digital.sub('',sys)
+        if base!=sys and base in per: per[sys].extend(per[base])
     for system,rows in sorted(per.items()):
         exact=collections.defaultdict(list)
         alias_owners=collections.defaultdict(set)
@@ -129,7 +133,7 @@ def apply_index(out,merged,platforms,base_title,norm,write_json,is_rom_hack):
             if not keys: continue
             canonical=base_title(title)
             for k in keys: alias_owners[k].add(canonical)
-            if not known.intersection(keys):
+            if not known.intersection(keys) and not digital.search(system):
                 merged[system].add(title)
                 known.add(base_title(title))
                 report['launchbox_added_titles']+=1

@@ -68,12 +68,14 @@ def files_for(repo,branch):
                 sha=row.get('sha','')
                 if kind not in result or not re.fullmatch(r'[a-f0-9]{40}',sha): continue
                 sub=request_json(base+sha)
-                if sub.get('truncated'): raise ValueError('dossier images incomplet '+kind)
+                if sub.get('truncated'): print('Index Libretro partiel:',repo,kind)
+                # Preserve all valid entries from the other directories.
                 for file in sub.get('tree',[]): add(kind,file.get('path',''),file)
         else:
             for row in data.get('tree',[]):
                 kind,sep,filename=row.get('path','').partition('/')
                 add(kind,filename,row)
+        if not any(result.values()): raise ValueError('aucune image indexée')
         file.write_text(json.dumps(result,ensure_ascii=False),encoding='utf-8')
         return result
     except Exception as e:
@@ -111,9 +113,10 @@ def index_games(out,merged,base_title,write_json):
             clean=re.sub(r'[&*/:<>?\\|"]','_',title)
             hit=exact.get(clean.casefold())
             alternate=False
-            if hit is None:
+            if hit is None or hit[0]!=0:
                 pool=groups.get(base_title(clean),[])
-                if not pool: continue
+                if not pool and hit is None: continue
+                if hit is not None: pool=[hit,*pool]
                 # Same normalized title, not an unrelated search result.
                 hit=min(pool,key=lambda r:(r[0],r[1].casefold()))
                 alternate=True
