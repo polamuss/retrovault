@@ -10,6 +10,7 @@ from launchbox_index import apply_index
 from fixed_photos import build_fixed_photos
 from gametdb_index import index_gametdb
 from openvgdb_index import index_openvgdb
+from catalog_overrides import load_overrides, apply_catalog_overrides, apply_image_exclusions
 ROOT=Path(__file__).resolve().parents[1]
 BASE='https://raw.githubusercontent.com/libretro/libretro-database/master/'
 
@@ -316,8 +317,11 @@ def main():
         names.difference_update(excluded)
         removed_hacks+=len(excluded)
     lb=merge_launchbox(args.launchbox,merged,platforms) if args.launchbox else None
+    overrides=load_overrides()
+    override_stats=apply_catalog_overrides(merged,overrides)
     lbart,lb_groups,lb_stats=apply_index(out,merged,platforms,base_title,norm,write_json,is_rom_hack) if args.fetch else ({},{},{})
     count+=lb_stats.get('launchbox_added_titles',0)
+    raw_entry_count=count
     index={}
     for sys,names in sorted(merged.items()):
         if not names: continue
@@ -337,6 +341,10 @@ def main():
     media_report.update(gtdb_stats)
     ovdb,ov_stats=index_openvgdb(out,merged,base_title,write_json) if args.fetch else ({},{})
     media_report.update(ov_stats)
+    source_indexes={'art':art,'launchbox_art':lbart,'gametdb_art':gtdb,'openvgdb_art':ovdb}
+    media_report.update(override_stats)
+    media_report.update(apply_image_exclusions(out,overrides,images,source_indexes))
+    write_json(out/'data/catalog-overrides.json',overrides)
     media_report['rom_hacks_removed']=removed_hacks+lb_stats.get('launchbox_hacks_removed_from_catalog',0)
     covered=0
     gametdb_only=0
@@ -381,7 +389,12 @@ def main():
     snapshot_path='data/catalog/all-'+hashlib.sha256(snapshot_bytes).hexdigest()[:24]+'.json'
     (out/snapshot_path).write_bytes(snapshot_bytes)
     media_report['game_editions_without_image_reference']=total-covered
-    report={'status':'fetched' if args.fetch else 'starter','platforms':len(index),'editions':total,'duplicate_entries_removed':max(0,count+(lb or {}).get('added_titles',0)-total),'sources_success':succeeded,'sources_failed':failed,'launchbox':lb,**media_report}
+    removed_by_overrides=override_stats['catalog_excluded_titles']
+    removed_by_hacks=removed_hacks+lb_stats.get('launchbox_hacks_removed_from_catalog',0)
+    duplicate_entries=raw_entry_count-removed_by_hacks-removed_by_overrides-total
+    if duplicate_entries < 0:
+        raise RuntimeError('Compteurs incohérents: entrées brutes inférieures aux entrées publiées.')
+    report={'status':'fetched' if args.fetch else 'starter','platforms':len(index),'editions':total,'duplicate_entries_removed':duplicate_entries,'source_entries_seen':raw_entry_count,'sources_success':succeeded,'sources_failed':failed,'launchbox':lb,**media_report}
     write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'art':art,'launchbox_art':lbart,'gametdb_art':gtdb,'openvgdb_art':ovdb,'groups':lb_groups,'system_counts':system_counts,'catalog_snapshot':snapshot_path,'report':report})
     write_json(out/'data/report.json',report)
     if out!=ROOT: shutil.copy2(ROOT/'index.html',out/'index.html')
