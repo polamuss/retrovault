@@ -28,7 +28,7 @@ def get(url,limit=80*1024*1024):
     return b.decode('utf-8-sig',errors='replace')
 def parse_dat(text):
     if text.lstrip().startswith(('<datafile','<?xml')):
-        return {x.get('name') for x in ET.fromstring(text).iter() if x.tag in ('game','machine') and valid(x.get('name'))}
+        return [x.get('name') for x in ET.fromstring(text).iter() if x.tag in ('game','machine') and valid(x.get('name'))]
     return {n for m in re.finditer(r'(?:^|\n)\s*(?:game|machine)\s*\(\s*name\s+"((?:[^"\\]|\\.)*)"',text) if valid(n:=re.sub(r'\\(["\\])',r'\1',m[1]))}
 def download(path):
     try:
