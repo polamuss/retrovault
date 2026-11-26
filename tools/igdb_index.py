@@ -239,6 +239,9 @@ def main():
         previous_refs.update((system, n) for n in refs)
         previous_covers.update((system, n) for n in covers)
         for group, editions in groups_by_key.items():
+            if system not in PLATFORM_ALIASES:
+                stats["unmapped_platform"] += 1
+                continue
             if not group or any((system, n) in suppressed for n in editions):
                 if any((system, n) in suppressed for n in editions):
                     stats["moderation_excluded"] += 1
