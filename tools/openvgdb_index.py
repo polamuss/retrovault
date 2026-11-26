@@ -135,25 +135,37 @@ def read_sqlite_rows(db_path):
 
         rom_id = col(rc, "romID")
         release_rom_id = col(relc, "romID")
+        rom_release_id = col(rc, "releaseID")
+        release_pk = col(relc, "releaseID")
+        if rom_id and release_rom_id:
+            join = 'rel."' + release_rom_id + '" = rom."' + rom_id + '"'
+        elif rom_release_id and release_pk:
+            join = 'rel."' + release_pk + '" = rom."' + rom_release_id + '"'
+        else:
+            raise ValueError("relation ROMs/RELEASES non reconnue")
         system_id = col(rc, "systemID") or col(relc, "systemID")
         system_pk = col(sc, "systemID")
-        system_name = col(sc, "systemName")
+        system_name = col(sc, "systemName", "name")
         title = col(relc, "releaseTitleName", "releaseName", "title")
         cover = col(relc, "releaseCoverFront", "releaseCoverFrontURL", "coverFront", "cover_url")
+        cover_table = "rel"
+        if not cover:
+            cover = col(rc, "releaseCoverFront", "releaseCoverFrontURL", "coverFront", "cover_url")
+            cover_table = "rom"
         filename = col(rc, "romExtensionlessFileName", "romFileName", "filename")
-        if not all((rom_id, release_rom_id, system_id, system_pk, system_name, title, cover)):
+        if not all((system_id, system_pk, system_name, title, cover)):
             raise ValueError("schéma OpenVGDB non reconnu (colonnes ROMs/RELEASES/SYSTEMS)")
         if not filename:
             filename = "''"
         else:
-            filename = "rom." + '"' + filename.replace('"', '""') + '"'
+            filename = 'rom."' + filename.replace('"', '""') + '"'
+        system_join = 'rom."' + system_id + '"' if system_id in rc.values() else 'rel."' + system_id + '"'
         query = (
             'SELECT DISTINCT sys."' + system_name + '", rel."' + title + '", ' + filename +
-            ', rel."' + cover + '" FROM "' + roms + '" AS rom '
-            'JOIN "' + releases + '" AS rel ON rel."' + release_rom_id + '" = rom."' + rom_id + '" '
-            'JOIN "' + systems + '" AS sys ON sys."' + system_pk + '" = '
-            + ('rom."' + system_id + '"' if system_id in rc.values() else 'rel."' + system_id + '"')
-            + ' WHERE rel."' + cover + '" IS NOT NULL AND rel."' + cover + '" <> ""'
+            ', ' + cover_table + '."' + cover + '" FROM "' + roms + '" AS rom '
+            'JOIN "' + releases + '" AS rel ON ' + join + ' '
+            'JOIN "' + systems + '" AS sys ON sys."' + system_pk + '" = ' + system_join +
+            ' WHERE ' + cover_table + '."' + cover + '" IS NOT NULL AND ' + cover_table + '."' + cover + '" <> ""'
         )
         return conn.execute(query).fetchall()
 
