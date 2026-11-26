@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       steamgriddb:
-        description: Rechercher des images SteamGridDB sur 150 titres maximum (conditions API acceptées)
+        description: Rechercher des images SteamGridDB sur 300 titres maximum (conditions API acceptées)
         type: boolean
         default: false
 permissions:
