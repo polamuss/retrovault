@@ -70,7 +70,7 @@ def files_for(repo,branch):
                 sub=request_json(base+sha)
                 if sub.get('truncated'): print('Index Libretro partiel:',repo,kind)
                 # Preserve all valid entries from the other directories.
-                for file in sub.get('tree',[]): add(kind,file.get('path',''),file)
+                for item in sub.get('tree',[]): add(kind,item.get('path',''),item)
         else:
             for row in data.get('tree',[]):
                 kind,sep,filename=row.get('path','').partition('/')
