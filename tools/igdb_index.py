@@ -179,6 +179,7 @@ def main():
 
     stats = Counter()
     groups = []
+    all_groups = {}
     previous_refs = set()
     previous_covers = set()
     fixed_images = index.get("images", {})
@@ -190,6 +191,7 @@ def main():
         groups_by_key = defaultdict(list)
         for name in names:
             groups_by_key[group_key(name)].append(name)
+        all_groups[system] = groups_by_key
         refs = set()
         covers = set()
         for field in ("art", "launchbox_art", "gametdb_art", "openvgdb_art", "steamgriddb_art"):
@@ -295,6 +297,7 @@ def main():
     additional_groups = 0
     new_covered_editions = 0
     new_cover_editions = 0
+    newly_covered_groups = 0
     for system, row in snapshot.items():
         names, aliases = row
         rows = {}
@@ -320,6 +323,10 @@ def main():
             target.write_text(json.dumps(rows, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
             paths[system] = path
             additional_groups += len(groups_with_result)
+            for group in groups_with_result:
+                editions = all_groups.get(system, {}).get(group, [])
+                if editions and not any((system, edition) in previous_refs for edition in editions):
+                    newly_covered_groups += 1
 
     index["igdb_art"] = paths
     report.update(
@@ -328,6 +335,7 @@ def main():
         igdb_additional_groups=additional_groups,
         igdb_newly_covered_editions=new_covered_editions,
         igdb_new_cover_editions=new_cover_editions,
+        igdb_newly_covered_groups=newly_covered_groups,
         igdb_lookups_this_run=attempted,
         igdb_api_requests=stats["api_requests"],
         igdb_diagnostics=dict(stats),
@@ -337,7 +345,7 @@ def main():
     report["game_editions_with_cover_reference"] = report.get("game_editions_with_cover_reference", 0) + new_cover_editions
     report["game_title_groups_with_image_reference"] = min(
         report.get("game_title_groups", 0),
-        report.get("game_title_groups_with_image_reference", 0) + max(0, additional_groups - stats["already_covered"])
+        report.get("game_title_groups_with_image_reference", 0) + newly_covered_groups
     )
     for _ in range(3):
         report["site_bytes"] = sum(p.stat().st_size for p in out.rglob("*") if p.is_file())
