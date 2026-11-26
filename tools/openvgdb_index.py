@@ -18,7 +18,7 @@ RELEASE_API = "https://api.github.com/repos/OpenVGDB/OpenVGDB/releases/tags/v29.
 FALLBACK_URL = "https://github.com/OpenVGDB/OpenVGDB/releases/download/v29.0/openvgdb.zip"
 HOSTS = {"gamefaqs.gamespot.com", "img.gamefaqs.net", "gamefaqs.akamaized.net",
          "www.gamefaqs.com", "gamefaqs.com", "www.mobygames.com",
-         "cdn.mobygames.com", "images.launchbox-app.com"}
+         "cdn.mobygames.com", "images.launchbox-app.com", "gamesdb-images.launchbox.gg"}
 
 
 def safe_url(url):
