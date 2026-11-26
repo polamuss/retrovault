@@ -82,7 +82,7 @@ L'indexeur `tools/igdb_index.py` est préparé mais **désactivé par défaut**.
 
 La présence de `IGDB_CLIENT_ID` et `IGDB_CLIENT_SECRET` dans GitHub Secrets ne vaut pas validation. Deux conditions indépendantes sont nécessaires pour activer l'étape :
 
-1. L'administrateur responsable définit la variable de dépôt `RV_IGDB_APPROVED=true) après avoir confirmé les points ci-dessus.
+1. L'administrateur responsable définit la variable de dépôt `RV_IGDB_APPROVED=true après avoir confirmé les points ci-dessus.
 2. Une exécution manuelle du workflow demande explicitement `igdb=true`.
 
 Sans ces deux conditions, l'étape IGDB est ignorée. L'indexeur vérifie également les deux variables avant de lire les identifiants ou d'effectuer une requête. Les identifiants restent dans GitHub Secrets, les jetons OAuth ne sont jamais enregistrés dans le cache ni dans les fichiers publics, et les appels API sont effectués uniquement pendant la génération serveur. Les titres déjà couverts par une jaquette ne sont pas recherchés. Les titres courts ne sont pas exclus par leur longueur ; les correspondances ambiguës ou sur une mauvaise plateforme sont rejetées.
