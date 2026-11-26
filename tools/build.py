@@ -29,13 +29,15 @@ def get(url,limit=80*1024*1024):
 def parse_dat(text):
     if text.lstrip().startswith(('<datafile','<?xml')):
         return [x.get('name') for x in ET.fromstring(text).iter() if x.tag in ('game','machine') and valid(x.get('name'))]
-    return {n for m in re.finditer(r'(?:^|\n)\s*(?:game|machine)\s*\(\s*name\s+"((?:[^"\\]|\\.)*)"',text) if valid(n:=re.sub(r'\\(["\\])',r'\1',m[1]))}
+    return [n for m in re.finditer(r'(?:^|\n)\s*(?:game|machine)\s*\(\s*name\s+"((?:[^"\\]|\\.)*)"',text) if valid(n:=re.sub(r'\\(["\\])',r'\1',m[1]))]
+
 def download(path):
     try:
         names=parse_dat(get(BASE+urllib.parse.quote(path,safe='/')))
         if not names: raise ValueError('catalogue vide')
         return path,names,None
-    except Exception as e: return path,set(),str(e)
+    except Exception as e: return path,[],str(e)
+
 def extract_array(html,marker):
     start=html.index(marker)+len(marker)
     return json.JSONDecoder().raw_decode(html[start:])[0]
