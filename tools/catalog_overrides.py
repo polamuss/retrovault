@@ -4,7 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_FILE = ROOT / "data" / "catalog-overrides.json"
-ALLOWED_IMAGE_SOURCES = {"all", "fixed", "libretro", "launchbox", "gametdb", "openvgdb", "steamgriddb"}
+ALLOWED_IMAGE_SOURCES = {"all", "fixed", "libretro", "launchbox", "gametdb", "openvgdb", "steamgriddb", "igdb"}
 
 
 def load_overrides(path=DEFAULT_FILE):
