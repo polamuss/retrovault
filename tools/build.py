@@ -7,6 +7,7 @@ from collections import defaultdict
 from pathlib import Path
 from art_index import index_games, discover_hardware, search_missing_hardware
 from launchbox_index import apply_index
+from fixed_photos import build_fixed_photos
 ROOT=Path(__file__).resolve().parents[1]
 BASE='https://raw.githubusercontent.com/libretro/libretro-database/master/'
 
@@ -321,10 +322,11 @@ def main():
         filename=hashlib.sha256(sys.encode()).hexdigest()[:16]+'.json'; rel='data/catalog/'+filename
         write_json(out/rel,sorted(names,key=lambda x:(x.casefold(),x)));index[sys]=rel
     images,media_report=build_media(out,args.media_manifest)
+    media_report.update(build_fixed_photos(out,ROOT/'tools'/'fixed-photos',platforms,images))
     if args.fetch:
         media_report.update(fetch_public_hardware(out,platforms,images))
-        paths={v['path'] for v in images.values()}
-        media_report.update(image_references=len(images),unique_images=len(paths),deduplicated_images=len(images)-len(paths),image_bytes=sum((out/p).stat().st_size for p in paths))
+    paths={v['path'] for v in images.values()}
+    media_report.update(image_references=len(images),unique_images=len(paths),deduplicated_images=len(images)-len(paths),image_bytes=sum((out/p).stat().st_size for p in paths))
     write_image_credits(out,images)
     art,art_stats=index_games(out,merged,base_title,write_json) if args.fetch else ({},{})
     media_report.update(art_stats)
