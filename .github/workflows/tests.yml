@@ -1,0 +1,22 @@
+name: Tests RetroVault (branche de préparation)
+on:
+  push:
+    branches:
+      - feat/catalog-moderation-igdb-openvgdb
+permissions:
+  contents: read
+jobs:
+  tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Vérifier la syntaxe Python
+        run: python -m py_compile tools/build.py tools/catalog_overrides.py tools/openvgdb_index.py tools/steamgriddb_index.py tools/igdb_index.py tools/check_public_secrets.py
+      - name: Tests hors ligne
+        run: python -m unittest discover -s tools -p 'test_*.py'
