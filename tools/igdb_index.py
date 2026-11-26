@@ -92,6 +92,16 @@ def _token(client_id, client_secret):
     return token
 
 
+def _search_title(title):
+    original = base_title(title)
+    while True:
+        shorter = re.sub(r"\s*(?:\([^()]*\)|\[[^\[\]]*\])\s*$", "", title).strip()
+        if shorter == title or not shorter or base_title(shorter) != original:
+            break
+        title = shorter
+    return title
+
+
 def _query(title):
     safe = title.replace("\\", " ").replace('"', " ").replace(";", " ")
     return ('search "' + safe + '"; fields id,name,first_release_date,'
@@ -277,13 +287,16 @@ def main():
                 break
             attempted += 1
             try:
-                title = names[0]
+                title = _search_title(names[0])
                 rows = _request(title, client_id, token, stats)
                 url = choose_match(rows, names, system, stats)
                 image_id = url.rsplit("/", 1)[-1].removesuffix(".jpg") if url else None
                 cached[system + "|" + group] = {"image_id": image_id, "checked": now}
                 if url:
                     stats["matched_groups"] += 1
+                if attempted % 10 == 0:
+                    CACHE.parent.mkdir(parents=True, exist_ok=True)
+                    CACHE.write_text(json.dumps(cached, ensure_ascii=False, separators=(",", ":")), encoding="utf-8")
             except Exception:
                 stats["api_errors"] += 1
                 # Do not cache transient errors as permanent negative matches.
