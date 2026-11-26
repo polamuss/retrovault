@@ -2,7 +2,10 @@ name: Tests RetroVault (branche de préparation)
 on:
   push:
     branches:
-      - feat/catalog-moderation-igdb-openvgdb
+      - main
+      - 'feat/**'
+  pull_request:
+    branches: [main]
 permissions:
   contents: read
 jobs:
