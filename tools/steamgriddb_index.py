@@ -70,16 +70,27 @@ def clean_title(title):
     if m: title=m[2]+' '+m[1]+m[3]
     return re.sub(r'\s+',' ',title).strip()
 
+def equivalent_key(title):
+    # Conservative equivalences only, never discard subtitles or sequel numbers.
+    title=clean_title(title)
+    title=re.sub(r'\b(?:II|III|IV|VI|VII|VIII|IX|XI|XII)\b',lambda m:str({'II':2,'III':3,'IV':4,'VI':6,'VII':7,'VIII':8,'IX':9,'XI':11,'XII':12}[m.group(0)]),title)
+    return base_title(title.replace('&',' and '))
+
 def variants(names):
-    result=[]
+    primary=[]
+    secondary=[]
+    def add(seq,v):
+        v=' '.join(v.split())
+        if v and v.casefold() not in {x.casefold() for x in primary+secondary}: seq.append(v)
+    # Test distinct documented titles before punctuation-only variants.
     for n in names:
-        title=clean_title(n)
+        add(primary,clean_title(n))
+    for title in primary:
         plain=''.join(c for c in unicodedata.normalize('NFKD',title) if not unicodedata.combining(c))
         soft=re.sub(r'[™®©]','',plain).strip()
-        for v in (title,soft,re.sub(r'[^\w\s]',' ',soft)):
-            v=' '.join(v.split())
-            if v and v.casefold() not in {x.casefold() for x in result}: result.append(v)
-    return result[:4]
+        add(secondary,soft)
+        add(secondary,re.sub(r'[^\w\s]',' ',soft))
+    return (primary[:3]+secondary[:max(1,4-min(3,len(primary)))])[:4]
 
 def family(system):
     return re.sub(r' \((?:Digital|PSN|Games on Demand|Download Play)\)$','',system,flags=re.I)
@@ -120,14 +131,14 @@ def load_aliases(snapshot,stats):
 
 def acceptable_hit(g,keys,shared):
     if not isinstance(g,dict) or not isinstance(g.get('name'),str) or type(g.get('id')) is not int: return False
-    if base_title(g['name']) not in keys: return False
+    if equivalent_key(g['name']) not in keys: return False
     if 'software' in (g.get('types') or []): return False
     # Short or cross-platform matches require the database's verified flag.
     if (shared or len(base_title(g['name']))<4) and g.get('verified') is not True: return False
     return True
 
 def find(names,key,stats,shared=False):
-    keys={base_title(n) for n in names}-{''}
+    keys={equivalent_key(n) for n in names}-{''}
     ids={}
     for title in variants(names):
         data=api('search/autocomplete/'+urllib.parse.quote(title,safe=''),key)
