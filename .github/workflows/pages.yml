@@ -3,6 +3,11 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      steamgriddb:
+        description: Tester SteamGridDB sur 25 titres maximum (conditions API acceptées)
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -29,15 +34,20 @@ jobs:
           path: .rv-image-cache
           key: retrovault-media-v1-${{ github.run_id }}
           restore-keys: retrovault-media-v1-
-      - run: python -m py_compile tools/build.py tools/art_index.py tools/launchbox_index.py tools/fixed_photos.py tools/gametdb_index.py tools/openvgdb_index.py
+      - run: python -m py_compile tools/build.py tools/art_index.py tools/launchbox_index.py tools/fixed_photos.py tools/gametdb_index.py tools/openvgdb_index.py tools/steamgriddb_index.py tools/check_public_secrets.py
       - run: python tools/build.py --fetch --output dist
         env:
           GITHUB_TOKEN: ${{ github.token }}
+      - name: Indexer les references SteamGridDB
+        run: python tools/steamgriddb_index.py dist
+        env:
+          STEAMGRIDDB_API_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.steamgriddb && secrets.STEAMGRIDDB_API_KEY || '' }}
       - name: Verifier l absence de secrets dans le site public
         run: python tools/check_public_secrets.py dist
         env:
           RV_CHECK_IGDB_ID: ${{ secrets.IGDB_CLIENT_ID }}
           RV_CHECK_IGDB_SECRET: ${{ secrets.IGDB_CLIENT_SECRET }}
+          RV_CHECK_STEAMGRIDDB: ${{ secrets.STEAMGRIDDB_API_KEY }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

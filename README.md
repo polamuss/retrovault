@@ -57,3 +57,7 @@ Les données initiales ont été construites localement. Le téléchargement com
 ## Sécurité des identifiants API
 
 Ne jamais enregistrer un Client Secret, un jeton OAuth ou une clé API dans le dépôt, le HTML, le cache Actions ou les données publiées. Les identifiants IGDB doivent être gérés par un administrateur éligible aux conditions développeur Twitch. Un secret communiqué dans une conversation ou dans un fichier doit être renouvelé avant utilisation. Les secrets GitHub Actions `IGDB_CLIENT_ID` et `IGDB_CLIENT_SECRET` ne sont actuellement utilisés que par le contrôle de non-divulgation du site généré. L'accès API IGDB n'est pas activé. Les permissions de publication Pages sont limitées au job de déploiement, et les identifiants Git ne sont pas conservés après le checkout.
+
+## SteamGridDB (optionnel)
+
+Renouveler toute clé déjà partagée et l'enregistrer exclusivement dans le secret Actions `STEAMGRIDDB_API_KEY`. Après vérification des conditions d'utilisation, lancer manuellement `Publier RetroVault` en cochant `steamgriddb`. Le test interroge au maximum 25 titres distincts non couverts par les autres sources. Les résultats ambigus sont ignorés et les illustrations adultes ou humoristiques exclues. Seuls les liens HTTPS publics sont conservés dans le cache et le site. Aucun appel authentifié depuis le navigateur, aucun enregistrement des réponses brutes ou du secret. Le rapport indique les nouveaux groupes et éditions associés à une illustration. Aucun quota payant ni traitement massif automatique.
