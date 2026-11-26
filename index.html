@@ -966,9 +966,18 @@ async function rvPagesIGDB(p,n){
  return rows.filter(url=>typeof url==='string'&&rvPagesExternal(url)).map(url=>({url,source:'IGDB · jaquette',credit:'Référence de jaquette IGDB',rank:0}))
 }
 
+function rvPagesImageAllowed(p,n,candidate){
+ const rows=catalogOverridesCache?.image_exclusions||[]
+ if(!p?.system||!Array.isArray(rows))return true
+ const source=String(candidate?.source||'')
+ const id=source.includes('IGDB')?'igdb':source.includes('OpenVGDB')?'openvgdb':source.includes('SteamGridDB')?'steamgriddb':source.includes('GameTDB')?'gametdb':source.includes('LaunchBox')?'launchbox':source.includes('Libretro')?'libretro':source.includes('Catalogue publié')||source.includes('Photo fixe')?'fixed':''
+ return !rows.some(row=>row.system===p.system&&row.title===n&&(row.source==='all'||row.source===id))
+}
+
 async function rvPagesCandidates(p,n){
+ await loadCatalogOverrides()
  const [indexed,lb,gtd,igdb,ov,sg]=await Promise.all([rvPagesIndexedCandidate(p,n),rvPagesLBCandidates(p,n),rvPagesGTD(p,n),rvPagesIGDB(p,n),rvPagesOV(p,n),rvPagesSG(p,n)])
- const exact=[...(indexed?[indexed]:[]),...gtd,...igdb,...lb,...ov,...sg]
+ const exact=[...(indexed?[indexed]:[]),...gtd,...igdb,...lb,...ov,...sg].filter(candidate=>rvPagesImageAllowed(p,n,candidate))
  const variants=[]
  // Avoid resolving ten variants when several exact covers already exist.
  const others=exact.filter(c=>c.rank<2).length>=3?[]:groupFor(p,n).versions.filter(v=>v!==n&&!dumpKind(v)).slice(0,4)
@@ -982,7 +991,7 @@ async function rvPagesCandidates(p,n){
   ...exact.filter(c=>c.rank>=2),
   ...variants.filter(c=>c.rank>=2)
  ]
- if(!ordered.length&&indexed===null)ordered.push(...rvPagesGameCandidates(p,n))
+ if(!ordered.length&&indexed===null)ordered.push(...rvPagesGameCandidates(p,n).filter(candidate=>rvPagesImageAllowed(p,n,candidate)))
  const seen=new Set()
  return ordered.filter(c=>c?.url&&!seen.has(c.url)&&(seen.add(c.url),true)).slice(0,12)
 }
