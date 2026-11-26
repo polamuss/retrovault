@@ -61,7 +61,7 @@ def _key(row):
 
 
 def apply_catalog_overrides(merged, overrides):
-    """Apply exact platform/title corrections before indexing any artwork source."""
+    """Apply exact platform/title corrections after catalogue enrichment and before remaining indexes."""
     stats = {"catalog_excluded_titles": 0, "catalog_renamed_titles": 0, "catalog_renamed_pairs": []}
     excluded = [(r["system"], r["title"]) for r in overrides["excluded"]]
     for system, title in excluded:
@@ -90,7 +90,6 @@ def apply_catalog_overrides(merged, overrides):
 
 def apply_image_exclusions(out, overrides, images, source_indexes):
     """Remove only selected artwork references; catalogue entries remain untouched."""
-    import hashlib
     import json
     from pathlib import Path
 
