@@ -983,7 +983,7 @@ async function rvPagesCandidates(p,n){
  const others=exact.filter(c=>c.rank<2).length>=3?[]:groupFor(p,n).versions.filter(v=>v!==n&&!dumpKind(v)).slice(0,4)
  for(const v of others){
   const [a,b]=await Promise.all([rvPagesIndexedCandidate(p,v),rvPagesLBCandidates(p,v)])
-  for(const c of [...(a?[a]:[]),...b])variants.push({...c,credit:'Autre édition · '+v+' · '+c.credit})
+  for(const c of [...(a?[a]:[]),...b])if(rvPagesImageAllowed(p,n,c))variants.push({...c,credit:'Autre édition · '+v+' · '+c.credit})
  }
  const ordered=[
   ...exact.filter(c=>c.rank<2),
