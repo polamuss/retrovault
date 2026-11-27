@@ -8,6 +8,7 @@ import re
 import time
 import urllib.parse
 import urllib.request
+import unicodedata
 from collections import defaultdict
 from pathlib import Path
 
@@ -105,6 +106,11 @@ def index_games(out,merged,base_title,write_json,alias_maps=None):
         def group_key(n):
             key=base_title(n)
             return title_aliases.get(key,key)
+        def punctuation_key(n):
+            key=unicodedata.normalize('NFKD',base_title(n).casefold())
+            key=''.join(c for c in key if not unicodedata.combining(c))
+            return ''.join(c for c in key if c.isalnum())
+        relaxed=defaultdict(list)
         exact={}
         groups=defaultdict(list)
         alias_groups=defaultdict(list)
@@ -115,6 +121,7 @@ def index_games(out,merged,base_title,write_json,alias_maps=None):
                 if base:
                     groups[base].append((priority,name))
                     alias_groups[group_key(name)].append((priority,name))
+                    relaxed[punctuation_key(name)].append((priority,name))
         matches={}
         counts=[0,0,0]
         for title in sorted(merged[system]):
@@ -122,7 +129,13 @@ def index_games(out,merged,base_title,write_json,alias_maps=None):
             hit=exact.get(clean.casefold())
             alternate=False
             if hit is None or hit[0]!=0:
-                pool=groups.get(base_title(clean),[]) or alias_groups.get(group_key(title),[])
+                pool=list(dict.fromkeys(groups.get(base_title(clean),[])+groups.get(base_title(title),[])+alias_groups.get(group_key(title),[])+alias_groups.get(group_key(clean),[])))
+                if not pool:
+                    key=punctuation_key(title)
+                    candidates=relaxed.get(key,[]) if len(key)>=5 else []
+                    # Reject collisions between distinct normalized titles.
+                    if len({base_title(n) for _,n in candidates})==1:
+                        pool=candidates
                 if not pool and hit is None: continue
                 if hit is not None: pool=[hit,*pool]
                 # Same normalized title, not an unrelated search result.
