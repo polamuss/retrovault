@@ -59,12 +59,12 @@ def index_gametdb(out,merged,base_title,write_json,alias_maps=None):
                 loaded[db]=[]
                 stats['gametdb_errors'].append(str(exc))
         pool=defaultdict(list)
-        aliases=alias_maps.get(system,{})
+        aliases={**alias_maps.get(root,{}),**alias_maps.get(system,{})}
         alias_pool=defaultdict(list)
         for id,title in loaded[db]:
             if db=='wiitdb':
-                if root.endswith('GameCube') and not id.startswith('G'): continue
-                if root.endswith('Wii') and (id.startswith('G') or len(id)!=6): continue
+                if root.endswith('GameCube') and not id.startswith(('G','D','P')): continue
+                if root.endswith('Wii') and (id.startswith(('G','D','P')) or len(id)!=6): continue
             if db=='ps3tdb' and not re.fullmatch(r'[BN][A-Z]{3}\d{5}',id): continue
             if db=='dstdb' and len(id)!=4: continue
             key=base_title(title)

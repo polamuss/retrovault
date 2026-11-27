@@ -73,13 +73,54 @@ def load_rows():
             counts[system]+=1
         CACHE.write_text(json.dumps(result,ensure_ascii=False),encoding='utf-8')
         return result
+def steam_rows():
+    cache=ROOT/'.rv-image-cache'/'steam-appdb-games-v1.json'
+    import time
+    try:
+        if time.time()-cache.stat().st_mtime<14*86400: return json.loads(cache.read_text(encoding='utf-8'))
+    except (OSError,ValueError): pass
+    url='https://raw.githubusercontent.com/Austrum-lab/steam-appdb/master/data/game.json'
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url,headers={'User-Agent':'RetroVault metadata index'}),timeout=60) as response:
+            raw=response.read(32*1024*1024+1)
+        if len(raw)>32*1024*1024: raise ValueError('Steam index too large')
+        data=json.loads(raw)
+        rows=[[str(r['appid']),r['name']] for r in data if isinstance(r,dict) and str(r.get('appid','')).isdigit() and isinstance(r.get('name'),str)]
+        if not rows: raise ValueError('Steam index empty')
+        cache.parent.mkdir(parents=True,exist_ok=True)
+        cache.write_text(json.dumps(rows,ensure_ascii=False),encoding='utf-8')
+        return rows
+    except Exception:
+        if cache.is_file(): return json.loads(cache.read_text(encoding='utf-8'))
+        raise
+
+def index_steam(merged,base_title):
+    systems=[s for s in merged if system_key(s) in ('windows','microsoftwindows','pc','pcwindows','microsoftpc','microsoftwindowsdigital','windowsdigital')]
+    if not systems: return {}
+    pool=defaultdict(set)
+    for appid,title in steam_rows():
+        key=base_title(title)
+        if key: pool[key].add(appid)
+    result={}
+    for system in systems:
+        refs={}
+        for title in merged[system]:
+            key=base_title(title)
+            ids=pool.get(key,set())
+            if len(key)>=4 and len(ids)==1:
+                appid=next(iter(ids))
+                refs[title]=['https://cdn.cloudflare.steamstatic.com/steam/apps/'+appid+'/library_600x900.jpg']
+        if refs: result[system]=refs
+    return result
+
 def index_openvgdb(out,merged,base_title,write_json,alias_maps=None):
     alias_maps=alias_maps or {}
     stats={'openvgdb_source_rows':0,'openvgdb_matches':0,'openvgdb_platforms':0,'openvgdb_unmapped':[],'openvgdb_error':None}
     result={}
     try: rows=load_rows()
     except Exception as e:
-        stats['openvgdb_error']=str(e);return result,stats
+        stats['openvgdb_error']=str(e)
+        rows=[]
     stats['openvgdb_source_rows']=len(rows)
     targets={system_key(s):s for s in merged}
     targets.update({system_key(a):s for a,s in ALIASES.items() if s in merged})
@@ -97,12 +138,38 @@ def index_openvgdb(out,merged,base_title,write_json,alias_maps=None):
         pool=pools.get(system) or pools.get(root)
         if not pool: continue
         index={}
-        aliases=alias_maps.get(system,{})
+        aliases={**alias_maps.get(root,{}),**alias_maps.get(system,{})}
         alias_pool=defaultdict(set)
         for key,urls in pool.items(): alias_pool[aliases.get(key,key)].update(urls)
         for title in sorted(names):
             key=base_title(title)
             hits=pool.get(key,set()) or alias_pool.get(aliases.get(key,key),set())
+            if not hits:
+                stripped=re.sub(r'\s*\((?:19\d{2}|20\d{2})(?:\s*[-,]\s*[^)]*)?\)(?:\s*\([^)]*\))*\s*
+            if hits: index[title]=sorted(hits)[:3]
+        if index:
+            path='data/openvgdb/'+hashlib.sha256(system.encode()).hexdigest()[:16]+'.json'
+            write_json(out/path,index)
+            result[system]=path
+            stats['openvgdb_matches']+=len(index)
+    stats['openvgdb_platforms']=len(result)
+    stats['steam_bulk_matches']=0
+    try:
+        for system,refs in index_steam(merged,base_title).items():
+            path=result.get(system,'data/openvgdb/'+hashlib.sha256(system.encode()).hexdigest()[:16]+'.json')
+            existing=json.loads((out/path).read_text(encoding='utf-8')) if system in result else {}
+            for title,urls in refs.items():
+                if title not in existing:
+                    existing[title]=urls
+                    stats['steam_bulk_matches']+=1
+            write_json(out/path,existing)
+            result[system]=path
+    except Exception as e:
+        stats['steam_bulk_error']=str(e)
+    return result,stats
+,'',title)
+                k=base_title(stripped)
+                if stripped!=title and len(k)>=5: hits=pool.get(k,set()) or alias_pool.get(aliases.get(k,k),set())
             if hits: index[title]=sorted(hits)[:3]
         if index:
             path='data/openvgdb/'+hashlib.sha256(system.encode()).hexdigest()[:16]+'.json'

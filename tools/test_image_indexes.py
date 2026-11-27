@@ -21,6 +21,14 @@ class ImageIndexesTests(unittest.TestCase):
             self.assertEqual(stats['art_matches'],1)
             self.assertEqual(json.loads((out/result[system]).read_text())['rows']['Canonical Title'][1],'Known Alternate')
 
+    def test_libretro_digital_platform(self):
+        names={'Named_Boxarts':['Known Game'],'Named_Titles':[],'Named_Snaps':[]}
+        system='Sony - PlayStation 3 (PSN)'
+        with tempfile.TemporaryDirectory() as d:
+            with patch.object(art,'module_map',return_value={'Sony - PlayStation 3':('sample','master')}),patch.object(art,'files_for',return_value=names):
+                result,stats=art.index_games(Path(d),{system:{'Known Game'}},base_title,write_json)
+            self.assertEqual(stats['art_matches'],1)
+
     def test_launchbox_image_only_preserves_catalog_and_groups(self):
         system='Nintendo - Nintendo Entertainment System'
         merged=defaultdict(set,{system:{'Known Alternate','Existing Game'}})

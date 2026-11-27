@@ -373,7 +373,7 @@ def main():
         covered+=len(union)
         gametdb_only+=len((set(third)-set(lr)-set(launch)-local)&names)
         overlap+=len(set(lr)&set(launch)&names)
-        covers+=sum(n in local or (n in lr and lr[n][0]==0) or any(row[1] in (0,1) for row in launch.get(n,[])) for n in union)
+        covers+=sum(n in local or (n in lr and lr[n][0]==0) or n in third or n in fourth or any(row[1] in (0,1) for row in launch.get(n,[])) for n in union)
         aliases=read_json(out/lb_groups[sys]) if sys in lb_groups else {}
         def group_key(n):
             key=base_title(n)
@@ -394,6 +394,10 @@ def main():
     snapshot_path='data/catalog/all-'+hashlib.sha256(snapshot_bytes).hexdigest()[:24]+'.json'
     (out/snapshot_path).write_bytes(snapshot_bytes)
     media_report['game_editions_without_image_reference']=total-covered
+    media_report['game_cover_reference_percent']=round(100*covers/max(total,1),2)
+    media_report['game_image_reference_percent']=round(100*covered/max(total,1),2)
+    if args.fetch and before_catalog!={sys:frozenset(names) for sys,names in merged.items()}:
+        raise RuntimeError('Image enrichment changed the catalog')
     report={'status':'fetched' if args.fetch else 'starter','platforms':len(index),'editions':total,'duplicate_entries_removed':max(0,count+(lb or {}).get('added_titles',0)-total),'sources_success':succeeded,'sources_failed':failed,'launchbox':lb,**media_report}
     write_json(out/'data/index.json',{'version':1,'platforms':index,'images':images,'art':art,'launchbox_art':lbart,'gametdb_art':gtdb,'openvgdb_art':ovdb,'groups':lb_groups,'system_counts':system_counts,'catalog_snapshot':snapshot_path,'report':report})
     write_json(out/'data/report.json',report)
