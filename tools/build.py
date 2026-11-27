@@ -331,6 +331,18 @@ def main():
     media_report.update(image_references=len(images),unique_images=len(paths),deduplicated_images=len(images)-len(paths),image_bytes=sum((out/p).stat().st_size for p in paths))
     write_image_credits(out,images)
     alias_maps={sys:read_json(out/path) for sys,path in lb_groups.items()}
+    # The catalogue has already been built using the original rules. Image enrichment must not change it.
+    if args.fetch:
+        before_catalog={sys:frozenset(names) for sys,names in merged.items()}
+        extra_art,extra_aliases,extra_stats=apply_index(out,merged,platforms,base_title,norm,write_json,is_rom_hack,images_only=True,previous_art=lbart)
+        if before_catalog!={sys:frozenset(names) for sys,names in merged.items()}:
+            raise RuntimeError('La recherche d images a modifie le catalogue')
+        lbart.update(extra_art)
+        for sys,mapping in extra_aliases.items():
+            current=alias_maps.setdefault(sys,{})
+            for key,owner in mapping.items():
+                if key not in current: current[key]=owner
+        media_report['launchbox_image_only']=extra_stats
     art,art_stats=index_games(out,merged,base_title,write_json,alias_maps) if args.fetch else ({},{})
     gtdb,gtdb_stats=index_gametdb(out,merged,base_title,write_json,alias_maps) if args.fetch else ({},{})
     media_report.update(art_stats)

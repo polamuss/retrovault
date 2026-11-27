@@ -109,7 +109,8 @@ def load_aliases(snapshot,stats):
     # Read the already generated LaunchBox cache only. No additional authenticated request.
     import gzip
     root=Path(__file__).resolve().parents[1]
-    file=root/'.rv-image-cache'/'launchbox-index-v3.json.gz'
+    file=root/'.rv-image-cache'/'launchbox-images-v4.json.gz'
+    if not file.is_file(): file=root/'.rv-image-cache'/'launchbox-index-v3.json.gz'
     if not file.is_file(): return {}
     try:
         with gzip.open(file,'rt',encoding='utf-8') as f: data=json.load(f)

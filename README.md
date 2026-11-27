@@ -66,3 +66,8 @@ Renouveler toute clé déjà partagée et l'enregistrer exclusivement dans le se
 ### Mode recherche longue (12.5)
 
 Le lancement manuel `steamgriddb_long` traite les titres admissibles sans limite de 300 titres pendant au maximum douze heures en trois phases séquentielles de quatre heures, avec au moins une seconde entre les appels. Il ne contourne pas les limitations du service : arrêt immédiat en cas de réponse 429 ou autre erreur bloquante. Les résultats sont sauvegardés et les recherches négatives restent valides 90 jours en mode long. Le rapport indique les titres restant à vérifier. Les douze heures ne garantissent pas de terminer tout le catalogue. Le mode normal de 300 titres reste disponible. Les phases reprennent le cache de la phase précédente, sans appels parallèles. Une erreur API bloquante empêche la phase suivante. Le site est publié après la dernière phase. Le lancement manuel peut actualiser les index des autres sources. Les alias LaunchBox documentés élargissent les correspondances des trois indexeurs, sans accepter les titres ambigus. Les conditions du fournisseur doivent autoriser le volume demandé.
+
+
+### 12.5.1
+
+La découverte de jeux utilise les règles LaunchBox historiques de la version 12.4. Un index distinct enrichit seulement les références d'images, sans ajout, suppression ou regroupement de titres. Le cache d'images élargi est indépendant du cache de catalogue. Les autres indexeurs utilisent ces alias uniquement pour rechercher des illustrations.

@@ -91,9 +91,9 @@ def index_games(out,merged,base_title,write_json,alias_maps=None):
     except Exception as e:
         print('Liste des index Libretro indisponible:',str(e))
         return result,stats
-    aliases={'Microsoft - XBOX':'Microsoft - Xbox','Microsoft - XBOX 360':'Microsoft - Xbox 360','NEC - PC Engine - TurboGrafx 16':'NEC - PC Engine - TurboGrafx 16'}
+    platform_aliases={'Microsoft - XBOX':'Microsoft - Xbox','Microsoft - XBOX 360':'Microsoft - Xbox 360','NEC - PC Engine - TurboGrafx 16':'NEC - PC Engine - TurboGrafx 16'}
     def build(system):
-        source_system=system if system in sources else aliases.get(system,system)
+        source_system=system if system in sources else platform_aliases.get(system,system)
         if source_system not in sources:
             match=[s for s in sources if s.casefold()==system.casefold()]
             if len(match)!=1: return system,None
@@ -101,10 +101,10 @@ def index_games(out,merged,base_title,write_json,alias_maps=None):
         repo,branch=sources[source_system]
         names=files_for(repo,branch)
         if names is None: return system,False
-        aliases=alias_maps.get(system,{})
+        title_aliases=alias_maps.get(system,{})
         def group_key(n):
             key=base_title(n)
-            return aliases.get(key,key)
+            return title_aliases.get(key,key)
         exact={}
         groups=defaultdict(list)
         alias_groups=defaultdict(list)
