@@ -145,29 +145,7 @@ def index_openvgdb(out,merged,base_title,write_json,alias_maps=None):
             key=base_title(title)
             hits=pool.get(key,set()) or alias_pool.get(aliases.get(key,key),set())
             if not hits:
-                stripped=re.sub(r'\s*\((?:19\d{2}|20\d{2})(?:\s*[-,]\s*[^)]*)?\)(?:\s*\([^)]*\))*\s*
-            if hits: index[title]=sorted(hits)[:3]
-        if index:
-            path='data/openvgdb/'+hashlib.sha256(system.encode()).hexdigest()[:16]+'.json'
-            write_json(out/path,index)
-            result[system]=path
-            stats['openvgdb_matches']+=len(index)
-    stats['openvgdb_platforms']=len(result)
-    stats['steam_bulk_matches']=0
-    try:
-        for system,refs in index_steam(merged,base_title).items():
-            path=result.get(system,'data/openvgdb/'+hashlib.sha256(system.encode()).hexdigest()[:16]+'.json')
-            existing=json.loads((out/path).read_text(encoding='utf-8')) if system in result else {}
-            for title,urls in refs.items():
-                if title not in existing:
-                    existing[title]=urls
-                    stats['steam_bulk_matches']+=1
-            write_json(out/path,existing)
-            result[system]=path
-    except Exception as e:
-        stats['steam_bulk_error']=str(e)
-    return result,stats
-,'',title)
+                stripped=re.sub(r'\s*\((?:19\d{2}|20\d{2})(?:\s*[-,]\s*[^)]*)?\)(?:\s*\([^)]*\))*\s*$','',title)
                 k=base_title(stripped)
                 if stripped!=title and len(k)>=5: hits=pool.get(k,set()) or alias_pool.get(aliases.get(k,k),set())
             if hits: index[title]=sorted(hits)[:3]

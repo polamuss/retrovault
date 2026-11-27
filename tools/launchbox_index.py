@@ -162,32 +162,7 @@ def apply_index(out,merged,platforms,base_title,norm,write_json,is_rom_hack,imag
         for title in sorted(merged[system]):
             hits=exact.get(base_title(title),[])
             if images_only and not hits:
-                # TOSEC / catalog filenames sometimes contain an extra publisher/year suffix.
-                stripped=re.sub(r'\s*\((?:19\d{2}|20\d{2})(?:\s*[-,]\s*[^)]*)?\)(?:\s*\([^)]*\))*\s*
-            if not hits: continue
-            # Ambiguous alternate-name matches are not silently merged.
-            canonical=[h for h in hits if base_title(h[0])==base_title(title)]
-            if canonical: hits=canonical
-            if len({base_title(h[0]) for h in hits})!=1: continue
-            images=[]
-            for _,media in hits:
-                for img in media:
-                    if img not in images: images.append(img)
-            ranks={0:0,1:1,6:2,2:3,3:4,7:5,4:6,5:7}
-            index[title]=sorted(images,key=lambda x:(ranks[x[1]],0 if x[0].lower().endswith(('.jpg','.jpeg')) else 1,x[2],x[0]))[:10]
-        if images_only and system in (previous_art or {}):
-            previous=json.loads((out/previous_art[system]).read_text(encoding='utf-8'))
-            for title,refs in previous.items():
-                index[title]=refs+[ref for ref in index.get(title,[]) if ref not in refs]
-        if not index: continue
-        path='data/launchbox/'+hashlib.sha256(system.encode()).hexdigest()[:16]+'.json'
-        write_json(out/path,index)
-        output[system]=path
-        report['launchbox_matches']+=len(index)
-        report['launchbox_image_references']+=sum(len(r) for r in index.values())
-    report['launchbox_platforms']=len(output)
-    return output,groups,report
-,'',title)
+                stripped=re.sub(r'\s*\((?:19\d{2}|20\d{2})(?:\s*[-,]\s*[^)]*)?\)(?:\s*\([^)]*\))*\s*$','',title)
                 if stripped!=title and len(base_title(stripped))>=5:
                     hits=exact.get(base_title(stripped),[])
             if not hits: continue
