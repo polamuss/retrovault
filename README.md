@@ -1,106 +1,63 @@
-# RetroVault Pages 12.4 (préparation)
+# RetroVault Pages 11.0
 
-RetroVault est un catalogue statique de matériel et de jeux rétro, publié avec GitHub Pages. L'interface conserve la collection personnelle et ses photos sur l'appareil du visiteur. Les catalogues publics, index d'images et corrections validées sont générés côté serveur par GitHub Actions.
+Site statique pour GitHub Pages, issu de RetroVault 10.4. Collection personnelle et photos privées stockées sur l'appareil, hors dépôt public. Les données du catalogue sont publiées par plateforme et chargées dans la mémoire de session. Les images du catalogue sont chargées exclusivement depuis les fichiers du site, après vérification du cache local. Une image absente ne déclenche pas de recherche externe.
 
-## Publication
+## Publier
 
-1. Définir GitHub Pages sur **GitHub Actions** dans les paramètres du dépôt.
-2. La branche `main` déclenche le workflow de publication.
-3. Le workflow télécharge les catalogues de métadonnées, génère les fichiers JSON et les index d'images, vérifie l'absence de secrets dans le dossier public, puis déploie `dist`.
-4. Le visiteur n'a rien à télécharger ni à installer.
+1. Créer le dépôt public `retrovault` dans GitHub.
+2. Décompresser cette archive et envoyer son contenu à la racine du dépôt (y compris `.github/workflows/pages.yml` et `.nojekyll`). La branche doit s'appeler `main`.
+3. Dans Settings > Pages > Build and deployment > Source, sélectionner GitHub Actions.
+4. Dans Actions > Publier RetroVault, lancer le workflow si nécessaire. Le workflow télécharge les catalogues de métadonnées référencés, les fusionne, construit les fichiers statiques et publie `dist`. Il ne télécharge aucune ROM.
 
-La génération ne télécharge aucune ROM. Les index d'images conservent des références vers les sources et ne copient pas les illustrations commerciales.
+Alternative pour tester immédiatement la version initiale : choisir Deploy from a branch, `main`, `/(root)`. Le catalogue initial ne contient que les données livrées avec cette archive, et non tous les jeux disponibles sur les sources distantes.
 
-## Données et statistiques
+## Données et images
 
-Les fichiers générés se trouvent dans `dist/data/` :
+`data/report.json` indique le nombre d'éditions, les doublons exacts retirés, les sources indisponibles et les statistiques d'images. Le regroupement des variantes par titre et plateforme se fait également dans l'interface.
 
-- `index.json` : index des plateformes, images et sources.
-- `report.json` : compteurs de plateformes, éditions, groupes de titres, couverture d'images, erreurs et taille du site.
-- `catalog/` : instantané consolidé du catalogue.
-- `catalog-overrides.json` : corrections et exclusions publiées.
+Le constructeur `tools/build.py` utilise les 146 chemins de catalogues répertoriés dans `tools/catalog_paths.json`. Le nombre de téléchargements réussis est indiqué dans le rapport. Vérifier les licences de redistribution des sources avant publication.
 
-Les compteurs distinguent les éditions et les groupes de titres. La couverture est calculée à partir des références réellement présentes dans les index générés, et non à partir du nombre de lignes ou d'images uniques.
+L'import LaunchBox est facultatif, réservé au responsable du site, pas au visiteur. Le ZIP n'est pas fourni dans cette archive. Si les droits de redistribution sont établis, lancer :
 
-## Modération du catalogue
-
-Les fiches de jeux proposent des actions de signalement : faux jeu, image incorrecte ou titre à corriger. Dans la liste globale des jeux, plusieurs titres peuvent être sélectionnés pour proposer une exclusion groupée. La liste des jeux exclus permet également de demander leur restauration.
-
-GitHub Pages étant un hébergement statique, l'interface publique ne peut pas écrire directement dans le dépôt sans exposer un jeton d'écriture. Les actions de l'interface préparent donc une proposition GitHub à examiner par un mainteneur. **Une proposition n'est pas appliquée automatiquement.** Après vérification, le mainteneur modifie `data/catalog-overrides.json`, puis la prochaine génération applique la correction à tous les visiteurs.
-
-Structure du fichier :
-
-```json
-{
-  "version": 1,
-  "excluded": [
-    {
-      "system": "Emerson - Arcadia 2001",
-      "title": "Geometrydash",
-      "reason": "Titre signalé comme faux jeu"
-    }
-  ],
-  "title_overrides": [
-    {
-      "system": "Nintendo - Nintendo Entertainment System",
-      "title": "Ancien titre",
-      "replacement": "Titre corrigé"
-    }
-  ],
-  "image_exclusions": [
-    {
-      "system": "Nintendo - Nintendo Entertainment System",
-      "title": "Jeu",
-      "source": "libretro"
-    }
-  ]
-}
+```sh
+python tools/build.py --fetch --launchbox /chemin/Metadata.zip --output dist
 ```
 
-Les exclusions et corrections de titre utilisent la plateforme exacte et un titre normalisé (casse, espaces et ponctuation). Les exclusions d'images acceptent `all`, `fixed`, `libretro`, `launchbox`, `gametdb`, `openvgdb`, `steamgriddb` ou `igdb`. Retirer une image ne supprime pas le jeu. Une correction de titre est appliquée après l'enrichissement LaunchBox, puis propagée à son index et aux index générés ensuite.
+Le lecteur conserve les titres déjà connus, ajoute uniquement les nouveaux titres reconnus sur une plateforme connue et ne présente pas les données LaunchBox comme des éditions physiques certaines. Les descriptions et les images de LaunchBox ne sont pas automatiquement copiées. Le rapport distingue les correspondances, les titres ajoutés et les plateformes non reconnues.
 
-## Sources d'images
+Le manifeste `tools/approved-images.json` est initialement vide. Il permet d'associer des images autorisées (fichiers dans `tools/approved-assets/`) à des clés précises. Exemple de structure pour une photo dont vous possédez les droits :
 
-- Libretro : jaquettes, écrans-titres et captures, avec priorité aux jaquettes.
-- LaunchBox : références d'images, avec correspondances contrôlées.
-- GameTDB : jaquettes identifiées par plateforme et code de jeu.
-- OpenVGDB : import SQLite en lecture seule et références de jaquettes.
-- SteamGridDB : recherche facultative et limitée, déclenchée manuellement.
-- Photos fixes : uniquement les fichiers explicitement autorisés à la redistribution.
+```json
+[
+  {
+    "key": ["Nintendo - Super Nintendo Entertainment System", "Super Mario World (Europe)"],
+    "file": "exemple.png",
+    "kind": "cover",
+    "redistribution_authorized": true,
+    "credit": "Auteur, source, licence"
+  }
+]
+```
 
-OpenVGDB est téléchargé depuis la publication GitHub officielle. Le nom de l'archive est résolu depuis les métadonnées de la release, puis le fichier SQLite est contrôlé et ses tables/colonnes inspectées avant la requête. Le cache local n'est remplacé qu'après un import exploitable. Une erreur de cette source n'interrompt pas la génération et les autres sources continuent de fonctionner.
-
-Les références externes sont validées par liste blanche HTTPS. Le navigateur met les images en cache localement et conserve le préchargement limité aux deux pages suivantes. Les images IGDB, si l'intégration est autorisée ultérieurement, restent référencées sur leur CDN et ne sont pas copiées dans le dépôt.
-
-## IGDB : verrouillage d'activation
-
-L'indexeur `tools/igdb_index.py` est préparé mais **désactivé par défaut**. Aucun appel IGDB ne doit être effectué avant confirmation explicite de l'administrateur responsable concernant :
-
-- l'éligibilité de l'application Twitch et du compte utilisé ;
-- les conditions applicables à l'usage de l'API ;
-- la conservation des données et l'affichage des images IGDB dans RetroVault.
-
-La présence de `IGDB_CLIENT_ID` et `IGDB_CLIENT_SECRET` dans GitHub Secrets ne vaut pas validation. Deux conditions indépendantes sont nécessaires pour activer l'étape :
-
-1. L'administrateur responsable définit la variable de dépôt `RV_IGDB_APPROVED=true` après avoir confirmé les points ci-dessus.
-2. Une exécution manuelle du workflow demande explicitement `igdb=true`.
-
-Sans ces deux conditions, l'étape IGDB est ignorée. L'indexeur vérifie également les deux variables avant de lire les identifiants ou d'effectuer une requête. Les identifiants restent dans GitHub Secrets, les jetons OAuth ne sont jamais enregistrés dans le cache ni dans les fichiers publics, et les appels API sont effectués uniquement pendant la génération serveur. Les titres déjà couverts par une jaquette ne sont pas recherchés. Les titres courts ne sont pas exclus par leur longueur ; les correspondances ambiguës ou sur une mauvaise plateforme sont rejetées.
-
-## Sécurité et maintenance
-
-- Ne jamais ajouter de clé API, secret OAuth ou jeton dans le HTML, le dépôt, les fichiers JSON publics ou les journaux.
-- Le contrôle `tools/check_public_secrets.py` est conservé et exécuté avant publication.
-- Les erreurs de sources facultatives ne doivent pas effacer les résultats déjà en cache.
-- Les tests hors ligne sont lancés avant la génération avec `python -m unittest discover -s tools -p 'test_*.py'`.
-- Les intégrations existantes, la collection personnelle, l'identification, les photos fixes, les regroupements et le cache navigateur doivent rester fonctionnels.
-
-## Développement local
+Pour le matériel, la clé est `["hardware", "Super Nintendo"]`. Pour les photos de référence d'une cartouche, utiliser `["pcb", "REFERENCE|02_pcb_front"]`, avec `kind: "pcb"`. Les jaquettes sont converties en AVIF (480 pixels maximum), les PCB en WebP sans perte à leur résolution originale. Les fichiers identiques après encodage ne sont stockés qu'une fois, sous leur SHA-256. Seuls les fichiers déclarés explicitement et autorisés à la redistribution sont inclus. Ne jamais publier de photos privées, d'archives de sauvegarde personnelles ou de métadonnées non autorisées.
 
 ```sh
 python -m pip install Pillow==11.3.0
-python -m unittest discover -s tools -p 'test_*.py'
-python tools/build.py --fetch --output dist
+python tools/build.py --output dist
 ```
 
-L'option SteamGridDB se lance uniquement via le workflow manuel, après validation des conditions de cette source. IGDB reste désactivé tant que l'administrateur n'a pas confirmé son éligibilité et les conditions applicables.
+Le visiteur n'a rien à installer. Le cache d'images du navigateur est configurable de 0 à 500 Mo (100 Mo par défaut). Il évite un nouveau téléchargement pour une image encore en cache. Le préchargement porte sur les deux pages de jeux suivantes. La collection reste locale : pensez à l'exporter depuis l'ancien site puis à l'importer depuis Réglages sur la nouvelle adresse.
+
+La version conserve les outils d'identification et les informations techniques. Certaines descriptions et informations techniques continuent à être consultées auprès des sources de référence à l'ouverture des fiches. Aucune recherche distante d'images du catalogue n'est lancée à la navigation.
+
+## État de validation
+
+Les données initiales ont été construites localement. Le téléchargement complet des sources, l'import du véritable fichier LaunchBox et le déploiement GitHub Pages ne sont pas vérifiés ici. Aucune image publique n'est incluse dans la version initiale. Les photos personnelles importées gardent leurs octets d'origine (formats JPEG, PNG et WebP, limite de 20 Mio par fichier), sauf rotation explicite, réalisée en PNG.
+
+## Sécurité des identifiants API
+
+Ne jamais enregistrer un Client Secret, un jeton OAuth ou une clé API dans le dépôt, le HTML, le cache Actions ou les données publiées. Les identifiants IGDB doivent être gérés par un administrateur éligible aux conditions développeur Twitch. Un secret communiqué dans une conversation ou dans un fichier doit être renouvelé avant utilisation. Les secrets GitHub Actions `IGDB_CLIENT_ID` et `IGDB_CLIENT_SECRET` ne sont actuellement utilisés que par le contrôle de non-divulgation du site généré. L'accès API IGDB n'est pas activé. Les permissions de publication Pages sont limitées au job de déploiement, et les identifiants Git ne sont pas conservés après le checkout.
+
+## SteamGridDB (optionnel)
+
+Renouveler toute clé déjà partagée et l'enregistrer exclusivement dans le secret Actions `STEAMGRIDDB_API_KEY`. Après vérification des conditions d'utilisation, lancer manuellement `Publier RetroVault` en cochant `steamgriddb`. Le test interroge au maximum 300 titres distincts sans image, répartis entre les plateformes, avec un maximum de 450 appels API et un budget de 15 minutes. Les noms courts, les variantes nettoyées et les titres alternatifs documentés sont recherchés. Les anciens échecs sont retentés une fois, puis les échecs sont mémorisés 30 jours. Les illustrations multiplateformes exigent des noms officiels documentés et une correspondance vérifiée. Les résultats ambigus sont ignorés et les illustrations adultes ou humoristiques exclues. Seuls les liens HTTPS publics sont conservés dans le cache et le site. Aucun appel authentifié depuis le navigateur, aucun enregistrement des réponses brutes ou du secret. Le rapport indique les nouveaux groupes et éditions associés à une illustration. Aucun quota payant ni traitement massif automatique.

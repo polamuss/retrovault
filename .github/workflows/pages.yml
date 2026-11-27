@@ -8,10 +8,6 @@ on:
         description: Rechercher des images SteamGridDB sur 300 titres maximum (conditions API acceptées)
         type: boolean
         default: false
-      igdb:
-        description: Activer l'indexation des jaquettes IGDB (validation administrateur déjà effectuée)
-        type: boolean
-        default: false
 permissions:
   contents: read
 concurrency:
@@ -38,9 +34,9 @@ jobs:
           path: .rv-image-cache
           key: retrovault-media-v1-${{ github.run_id }}
           restore-keys: retrovault-media-v1-
-      - run: python -m py_compile tools/build.py tools/art_index.py tools/launchbox_index.py tools/fixed_photos.py tools/gametdb_index.py tools/openvgdb_index.py tools/steamgriddb_index.py tools/catalog_overrides.py tools/igdb_index.py tools/check_public_secrets.py
-      - name: Tester les correspondances et corrections hors ligne
-        run: python -m unittest discover -s tools -p 'test_*.py'
+      - run: python -m py_compile tools/build.py tools/art_index.py tools/launchbox_index.py tools/fixed_photos.py tools/gametdb_index.py tools/openvgdb_index.py tools/steamgriddb_index.py tools/check_public_secrets.py
+      - name: Tester les correspondances SteamGridDB hors ligne
+        run: python tools/test_steamgriddb_index.py
       - run: python tools/build.py --fetch --output dist
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -48,14 +44,6 @@ jobs:
         run: python tools/steamgriddb_index.py dist
         env:
           STEAMGRIDDB_API_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.steamgriddb && secrets.STEAMGRIDDB_API_KEY || '' }}
-      - name: Indexer les jaquettes IGDB
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.igdb }}
-        run: python tools/igdb_index.py dist
-        env:
-          RV_IGDB_APPROVED: 'true'
-          RV_IGDB_REQUESTED: ${{ inputs.igdb }}
-          IGDB_CLIENT_ID: ${{ secrets.IGDB_CLIENT_ID }}
-          IGDB_CLIENT_SECRET: ${{ secrets.IGDB_CLIENT_SECRET }}
       - name: Verifier l absence de secrets dans le site public
         run: python tools/check_public_secrets.py dist
         env:
@@ -66,7 +54,6 @@ jobs:
         with:
           path: dist
   deploy:
-    if: ${{ github.ref == 'refs/heads/main' }}
     permissions:
       contents: read
       pages: write

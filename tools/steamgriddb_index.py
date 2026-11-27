@@ -181,12 +181,6 @@ def main():
     if not isinstance(cached,dict): cached={}
     key=os.environ.get('STEAMGRIDDB_API_KEY','').strip()
     snapshot=read(out/index['catalog_snapshot'])
-    try: overrides=read(Path(__file__).resolve().parents[1]/'data'/'catalog-overrides.json')
-    except (OSError,ValueError): overrides={'image_exclusions':[]}
-    suppressed=set()
-    for row in overrides.get('image_exclusions',[]):
-        if row.get('source') in ('all','steamgriddb'):
-            suppressed.add((row.get('system'),row.get('title')))
     stats=Counter()
     lb_names=load_aliases(snapshot,stats) if key else {}
     # Track title families to distinguish digital editions from genuinely different platforms.
@@ -205,20 +199,11 @@ def main():
                 data=read(out/path)
                 if field=='art': data=data.get('rows',{})
                 seen.update(aliases.get(base_title(n),base_title(n)) for n in data)
-        # Fixed/curated images are already coverage: do not spend API calls on them.
-        for raw_key in index.get('images',{}):
-            try: image_system,image_title=json.loads(raw_key)
-            except (TypeError,ValueError): continue
-            if image_system==system:
-                seen.add(aliases.get(base_title(image_title),base_title(image_title)))
         existing[system]=seen
         groups=defaultdict(list)
         for n in names: groups[aliases.get(base_title(n),base_title(n))].append(n)
         for group,versions in groups.items():
             if group in seen or not group: continue
-            if any((system, edition) in suppressed for edition in versions) or (system, names[0] if names else '') in suppressed:
-                stats['moderation_image_excluded']+=1
-                continue
             official=sorted(lb_names.get(system,{}).get(group,()),key=lambda n:(base_title(n)!=group,len(n),n))
             shared=len(owners[group])>1
             # For different hardware families require documented official names on both sides.
@@ -275,7 +260,7 @@ def main():
         groups=set()
         for name in names:
             group=aliases.get(base_title(name),base_title(name))
-            if group in existing[system] or (system,name) in suppressed: continue
+            if group in existing[system]: continue
             values=cached.get(system+'|'+group,[])
             if isinstance(values,dict): values=values.get('links',[])
             if not isinstance(values,list): continue
