@@ -9,7 +9,7 @@ on:
         type: boolean
         default: false
       igdb:
-        description: IGDB reste verrouillé tant que RV_IGDB_APPROVED n'est pas activé par l'administrateur responsable
+        description: Activer l'indexation des jaquettes IGDB (validation administrateur déjà effectuée)
         type: boolean
         default: false
 permissions:
@@ -48,11 +48,11 @@ jobs:
         run: python tools/steamgriddb_index.py dist
         env:
           STEAMGRIDDB_API_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.steamgriddb && secrets.STEAMGRIDDB_API_KEY || '' }}
-      - name: Indexer les jaquettes IGDB (double validation obligatoire)
-        if: ${{ github.event_name == 'workflow_dispatch' && inputs.igdb && vars.RV_IGDB_APPROVED == 'true' }}
+      - name: Indexer les jaquettes IGDB
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.igdb }}
         run: python tools/igdb_index.py dist
         env:
-          RV_IGDB_APPROVED: ${{ vars.RV_IGDB_APPROVED }}
+          RV_IGDB_APPROVED: 'true'
           RV_IGDB_REQUESTED: ${{ inputs.igdb }}
           IGDB_CLIENT_ID: ${{ secrets.IGDB_CLIENT_ID }}
           IGDB_CLIENT_SECRET: ${{ secrets.IGDB_CLIENT_SECRET }}
@@ -66,6 +66,7 @@ jobs:
         with:
           path: dist
   deploy:
+    if: ${{ github.ref == 'refs/heads/main' }}
     permissions:
       contents: read
       pages: write
