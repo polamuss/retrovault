@@ -8,18 +8,22 @@ on:
         description: Rechercher des images SteamGridDB sur 300 titres maximum (conditions API acceptées)
         type: boolean
         default: false
+      steamgriddb_long:
+        description: Recherche longue SteamGridDB (2 heures maximum, reprise du cache, conditions API acceptées)
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
   group: pages
-  cancel-in-progress: true
+  cancel-in-progress: false
 jobs:
   build:
     permissions:
       contents: read
       pages: read
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 160
     steps:
       - uses: actions/checkout@v4
         with:
@@ -29,7 +33,7 @@ jobs:
           python-version: '3.12'
       - run: python -m pip install Pillow==11.3.0
       - name: Restaurer les images deja telechargees
-        uses: actions/cache@v4
+        uses: actions/cache/restore@v4
         with:
           path: .rv-image-cache
           key: retrovault-media-v1-${{ github.run_id }}
@@ -41,9 +45,21 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ github.token }}
       - name: Indexer les references SteamGridDB
-        run: python tools/steamgriddb_index.py dist
+        run: |
+          if [ "$RV_LONG_SCAN" = "true" ]; then
+            python tools/steamgriddb_index.py dist --long-scan
+          else
+            python tools/steamgriddb_index.py dist
+          fi
         env:
-          STEAMGRIDDB_API_KEY: ${{ github.event_name == 'workflow_dispatch' && inputs.steamgriddb && secrets.STEAMGRIDDB_API_KEY || '' }}
+          RV_LONG_SCAN: ${{ github.event_name == 'workflow_dispatch' && inputs.steamgriddb_long || false }}
+          STEAMGRIDDB_API_KEY: ${{ github.event_name == 'workflow_dispatch' && (inputs.steamgriddb || inputs.steamgriddb_long) && secrets.STEAMGRIDDB_API_KEY || '' }}
+      - name: Sauvegarder la progression des recherches
+        if: ${{ always() && !cancelled() }}
+        uses: actions/cache/save@v4
+        with:
+          path: .rv-image-cache
+          key: retrovault-media-v1-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Verifier l absence de secrets dans le site public
         run: python tools/check_public_secrets.py dist
         env:

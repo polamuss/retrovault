@@ -20,7 +20,9 @@ CACHE=Path('.rv-image-cache/steamgriddb-links-v1.json')
 MAX_TITLES=300
 MAX_REQUESTS=450
 MAX_SECONDS=900
+LONG_SECONDS=7200
 RETRY_DAYS=30
+LONG_RETRY_DAYS=90
 API_CALLS=0
 DEADLINE=0
 API_STOP_REASON=''
@@ -32,7 +34,9 @@ OPENER=urllib.request.build_opener(NoRedirect())
 def read(p): return json.loads(p.read_text(encoding='utf-8'))
 def write(p,obj):
     p.parent.mkdir(parents=True,exist_ok=True)
-    p.write_text(json.dumps(obj,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
+    tmp=p.with_name(p.name+'.tmp')
+    tmp.write_text(json.dumps(obj,ensure_ascii=False,separators=(',',':')),encoding='utf-8')
+    tmp.replace(p)
 def public_image(url):
     if not isinstance(url,str) or len(url)>500: return None
     try:
@@ -42,7 +46,7 @@ def public_image(url):
     except ValueError: return None
 def api(path,key):
     global API_CALLS, API_STOP_REASON
-    if API_CALLS>=MAX_REQUESTS or time.monotonic()>=DEADLINE:
+    if (MAX_REQUESTS is not None and API_CALLS>=MAX_REQUESTS) or time.monotonic()>=DEADLINE:
         API_STOP_REASON='budget';raise StopLookup()
     API_CALLS+=1
     time.sleep(1)
@@ -50,15 +54,21 @@ def api(path,key):
     try:
         with OPENER.open(req,timeout=12) as res:
             raw=res.read(2_000_001)
-        if len(raw)>2_000_000: raise StopLookup()
+        if len(raw)>2_000_000:
+            API_STOP_REASON='response_too_large'
+            raise StopLookup()
         data=json.loads(raw)
-        if data.get('success') is not True: raise StopLookup()
+        if not isinstance(data,dict) or data.get('success') is not True:
+            API_STOP_REASON='invalid_api_response'
+            raise StopLookup()
         return data.get('data',[])
     except urllib.error.HTTPError as e:
         if e.code==404: return []
         API_STOP_REASON='http_'+str(e.code)
         raise StopLookup() from None
-    except (OSError,ValueError): raise StopLookup() from None
+    except (OSError,ValueError):
+        API_STOP_REASON='network_or_response_error'
+        raise StopLookup() from None
 def clean_title(title):
     # Strip only annotations already recognized by the catalogue normalizer.
     original=base_title(title)
@@ -173,6 +183,11 @@ def find(names,key,stats,shared=False):
     return results
 
 def main():
+    global DEADLINE, MAX_REQUESTS, API_STOP_REASON
+    long_scan='--long-scan' in sys.argv[2:]
+    title_limit=None if long_scan else MAX_TITLES
+    if long_scan: MAX_REQUESTS=None
+    retry_days=LONG_RETRY_DAYS if long_scan else RETRY_DAYS
     out=Path(sys.argv[1])
     index=read(out/'data/index.json')
     report=read(out/'data/report.json')
@@ -231,25 +246,41 @@ def main():
             if not batches[system]: del batches[system]
     attempted=0
     stopped=False
-    global DEADLINE
-    DEADLINE=time.monotonic()+MAX_SECONDS
+    DEADLINE=time.monotonic()+(LONG_SECONDS if long_scan else MAX_SECONDS)
     now=int(time.time())
+    def fresh(token):
+        old=cached.get(token)
+        if isinstance(old,list): return bool(old)
+        if isinstance(old,dict): return bool(old.get('links')) or now-old.get('checked',0)<retry_days*86400
+        return False
+
+    pending=[(system,group,names,shared) for system,group,names,shared in ordered if not fresh(system+'|'+group)]
+    initial_pending=len(pending)
+    completed=0
     if key:
-        for system,group,names,shared in ordered:
+        print(f'SteamGridDB: mode {"long" if long_scan else "standard"}, {initial_pending} titres a verifier, {len(ordered)-initial_pending} deja traites.',flush=True)
+        for system,group,names,shared in pending:
+            if title_limit is not None and attempted>=title_limit:
+                API_STOP_REASON='title_budget'
+                break
+            if (MAX_REQUESTS is not None and API_CALLS>=MAX_REQUESTS) or time.monotonic()>=DEADLINE:
+                API_STOP_REASON='budget'
+                break
             token=system+'|'+group
-            old=cached.get(token)
-            if isinstance(old,list) and old: continue
-            if isinstance(old,dict) and (old.get('links') or now-old.get('checked',0)<RETRY_DAYS*86400): continue
-            if attempted>=MAX_TITLES or API_CALLS>=MAX_REQUESTS or time.monotonic()>=DEADLINE: break
             attempted+=1
             try:
                 links=find(names,key,stats,shared)
-                cached[token]={'links':links,'checked':now}
-                if attempted%10==0: write(CACHE,cached)
+                cached[token]={'links':links,'checked':int(time.time())}
+                completed+=1
+                if completed%25==0: write(CACHE,cached)
+                if completed%100==0:
+                    print(f'SteamGridDB progression: {completed}/{initial_pending}, {stats["accepted"]} nouvelles correspondances, {API_CALLS} appels.',flush=True)
             except StopLookup:
-                stopped=True
+                stopped=API_STOP_REASON!='budget'
                 break
         write(CACHE,cached)
+    remaining=initial_pending-completed
+    print(f'SteamGridDB bilan: {completed} titres termines, {remaining} restant a verifier. Motif: {API_STOP_REASON or ("complete" if not remaining else "disabled")}',flush=True)
     # Only public CDN links are stored, no API response or account information.
     paths={}
     editions=0
@@ -275,7 +306,7 @@ def main():
             editions+=len(rows)
             groups_added+=len(groups)
     index['steamgriddb_art']=paths
-    report.update(steamgriddb_additional_editions=editions,steamgriddb_additional_groups=groups_added,steamgriddb_lookups_this_run=attempted,steamgriddb_api_stopped=stopped,steamgriddb_lookup_results=dict(stats),steamgriddb_eligible_titles=len(jobs),steamgriddb_api_requests=API_CALLS,steamgriddb_stop_reason=API_STOP_REASON)
+    report.update(steamgriddb_additional_editions=editions,steamgriddb_additional_groups=groups_added,steamgriddb_lookups_this_run=attempted,steamgriddb_api_stopped=stopped,steamgriddb_lookup_results=dict(stats),steamgriddb_eligible_titles=len(jobs),steamgriddb_api_requests=API_CALLS,steamgriddb_stop_reason=API_STOP_REASON,steamgriddb_long_scan=long_scan,steamgriddb_completed_this_run=completed,steamgriddb_pending_before=initial_pending,steamgriddb_pending_after=remaining)
     report['game_editions_with_image_reference']+=editions
     report['game_editions_without_image_reference']-=editions
     report['game_title_groups_with_image_reference']+=groups_added
