@@ -20,7 +20,7 @@ CACHE=Path('.rv-image-cache/steamgriddb-links-v1.json')
 MAX_TITLES=300
 MAX_REQUESTS=450
 MAX_SECONDS=900
-LONG_SECONDS=7200
+LONG_SECONDS=14400
 RETRY_DAYS=30
 LONG_RETRY_DAYS=90
 API_CALLS=0
@@ -185,6 +185,8 @@ def find(names,key,stats,shared=False):
 def main():
     global DEADLINE, MAX_REQUESTS, API_STOP_REASON
     long_scan='--long-scan' in sys.argv[2:]
+    if long_scan and not os.getenv('STEAMGRIDDB_API_KEY','').strip():
+        raise RuntimeError('Secret STEAMGRIDDB_API_KEY absent')
     title_limit=None if long_scan else MAX_TITLES
     if long_scan: MAX_REQUESTS=None
     retry_days=LONG_RETRY_DAYS if long_scan else RETRY_DAYS
@@ -318,4 +320,7 @@ def main():
     print('SteamGridDB diagnostics: '+json.dumps(dict(stats),sort_keys=True))
     print('SteamGridDB: '+str(attempted)+' titres interrogés, '+str(groups_added)+' groupes supplémentaires. Arrêt API: '+str(stopped))
     if report['site_bytes']>950_000_000: raise SystemExit('Site trop volumineux')
+    if os.getenv('GITHUB_OUTPUT'):
+        with open(os.environ['GITHUB_OUTPUT'],'a',encoding='utf-8') as f:
+            f.write('continue_scan='+str(bool(key and long_scan and remaining and API_STOP_REASON=='budget')).lower()+'\n')
 if __name__=='__main__': main()

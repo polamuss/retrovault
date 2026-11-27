@@ -9,72 +9,65 @@ on:
         type: boolean
         default: false
       steamgriddb_long:
-        description: Recherche longue SteamGridDB (2 heures maximum, reprise du cache, conditions API acceptées)
+        description: Recherche longue SteamGridDB (12 heures maximum en 3 phases, reprise du cache, conditions API acceptées)
         type: boolean
         default: false
+      refresh_sources:
+        description: Actualiser les index LaunchBox, Libretro et GameTDB avant la recherche
+        type: boolean
+        default: true
 permissions:
   contents: read
+  pages: read
 concurrency:
   group: pages
   cancel-in-progress: false
 jobs:
   build:
-    permissions:
-      contents: read
-      pages: read
-    runs-on: ubuntu-latest
-    timeout-minutes: 160
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - run: python -m pip install Pillow==11.3.0
-      - name: Restaurer les images deja telechargees
-        uses: actions/cache/restore@v4
-        with:
-          path: .rv-image-cache
-          key: retrovault-media-v1-${{ github.run_id }}
-          restore-keys: retrovault-media-v1-
-      - run: python -m py_compile tools/build.py tools/art_index.py tools/launchbox_index.py tools/fixed_photos.py tools/gametdb_index.py tools/openvgdb_index.py tools/steamgriddb_index.py tools/check_public_secrets.py
-      - name: Tester les correspondances SteamGridDB hors ligne
-        run: python tools/test_steamgriddb_index.py
-      - run: python tools/build.py --fetch --output dist
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-      - name: Indexer les references SteamGridDB
-        run: |
-          if [ "$RV_LONG_SCAN" = "true" ]; then
-            python tools/steamgriddb_index.py dist --long-scan
-          else
-            python tools/steamgriddb_index.py dist
-          fi
-        env:
-          RV_LONG_SCAN: ${{ github.event_name == 'workflow_dispatch' && inputs.steamgriddb_long || false }}
-          STEAMGRIDDB_API_KEY: ${{ github.event_name == 'workflow_dispatch' && (inputs.steamgriddb || inputs.steamgriddb_long) && secrets.STEAMGRIDDB_API_KEY || '' }}
-      - name: Sauvegarder la progression des recherches
-        if: ${{ always() && !cancelled() }}
-        uses: actions/cache/save@v4
-        with:
-          path: .rv-image-cache
-          key: retrovault-media-v1-${{ github.run_id }}-${{ github.run_attempt }}
-      - name: Verifier l absence de secrets dans le site public
-        run: python tools/check_public_secrets.py dist
-        env:
-          RV_CHECK_IGDB_ID: ${{ secrets.IGDB_CLIENT_ID }}
-          RV_CHECK_IGDB_SECRET: ${{ secrets.IGDB_CLIENT_SECRET }}
-          RV_CHECK_STEAMGRIDDB: ${{ secrets.STEAMGRIDDB_API_KEY }}
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: dist
+    uses: ./.github/workflows/build-catalog.yml
+    with:
+      stage: first
+      lookup: ${{ github.event_name == 'workflow_dispatch' && (inputs.steamgriddb || inputs.steamgriddb_long) }}
+      long_scan: ${{ github.event_name == 'workflow_dispatch' && inputs.steamgriddb_long }}
+      refresh_sources: ${{ github.event_name == 'workflow_dispatch' && inputs.refresh_sources }}
+      publish: ${{ !(github.event_name == 'workflow_dispatch' && inputs.steamgriddb_long) }}
+    secrets: inherit
+  scan2:
+    needs: build
+    if: ${{ inputs.steamgriddb_long && needs.build.outputs.continue_scan == 'true' }}
+    uses: ./.github/workflows/build-catalog.yml
+    with:
+      stage: second
+      previous_stage: ${{ needs.build.outputs.cache_key }}
+      lookup: true
+      long_scan: true
+    secrets: inherit
+  scan3:
+    needs: scan2
+    if: ${{ needs.scan2.outputs.continue_scan == 'true' }}
+    uses: ./.github/workflows/build-catalog.yml
+    with:
+      stage: third
+      previous_stage: ${{ needs.scan2.outputs.cache_key }}
+      lookup: true
+      long_scan: true
+    secrets: inherit
+  publish:
+    needs: [build, scan2, scan3]
+    if: ${{ always() && !cancelled() && inputs.steamgriddb_long && needs.build.result == 'success' && (needs.scan2.result == 'success' || needs.scan2.result == 'skipped') && (needs.scan3.result == 'success' || needs.scan3.result == 'skipped') }}
+    uses: ./.github/workflows/build-catalog.yml
+    with:
+      stage: final
+      previous_stage: ${{ needs.scan3.outputs.cache_key || needs.scan2.outputs.cache_key || needs.build.outputs.cache_key }}
+      publish: true
+    secrets: inherit
   deploy:
     permissions:
       contents: read
       pages: write
       id-token: write
-    needs: build
+    needs: [build, scan2, scan3, publish]
+    if: ${{ always() && !cancelled() && needs.build.result == 'success' && (needs.publish.result == 'success' || (!inputs.steamgriddb_long && needs.publish.result == 'skipped')) }}
     runs-on: ubuntu-latest
     environment:
       name: github-pages

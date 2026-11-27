@@ -1,5 +1,5 @@
 """Use supplied LaunchBox metadata, never publish the full XML or its descriptions."""
-import collections, gzip, hashlib, json, re, time, urllib.request, zipfile
+import collections, gzip, hashlib, json, os, re, time, urllib.request, zipfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
@@ -30,7 +30,7 @@ def extract(src):
                             else: games[id]=(p,n)
                     elif e.tag=='GameAlternateName' and id.isdigit():
                         n=e.findtext('AlternateName')
-                        if n and len(n)<=300 and len(aliases[id])<16: aliases[id].add(n)
+                        if n and len(n)<=300: aliases[id].add(n)
                     elif e.tag=='GameImage' and id.isdigit():
                         f=e.findtext('FileName') or ''; kind=TYPES.get(e.findtext('Type')); reg=(e.findtext('Region') or '')[:80]
                         if kind is not None and FILE.fullmatch(f):
@@ -45,17 +45,17 @@ def extract(src):
         ranks={0:0,1:1,6:2,2:3,3:4,7:5,4:6,5:7}
         rows=sorted([[f,k,r] for (k,r),f in a.items()],key=lambda x:(ranks[x[1]],0 if x[2] in ('Europe','North America','World','') else 1,0 if x[0].lower().endswith(('.jpg','.jpeg')) else 1,x[2],x[0]))
         result[p].append([n,sorted(aliases.get(id,())),[x for x in rows if x[1] in (0,1)][:6]+[x for x in rows if x[1] in (2,3,6,7)][:3]+[x for x in rows if x[1] in (4,5)][:1]])
-    return {'schema':3,'rom_hacks':dict(excluded),'release_types':dict(release_types),'archive_sha256':hashlib.file_digest(open(src,'rb'),'sha256').hexdigest(),'source_counts':dict(counts),'platforms':dict(result)}
+    return {'schema':4,'rom_hacks':dict(excluded),'release_types':dict(release_types),'archive_sha256':hashlib.file_digest(open(src,'rb'),'sha256').hexdigest(),'source_counts':dict(counts),'platforms':dict(result)}
 
 def load_index():
     supplied=ROOT/'tools'/'launchbox-index.json.gz'
     cache=ROOT/'.rv-image-cache'/'launchbox-index-v3.json.gz'
     if supplied.is_file():
         with gzip.open(supplied,'rt',encoding='utf-8') as f: supplied_data=json.load(f)
-        if supplied_data.get('schema')==3: return supplied_data,'uploaded-index'
+        if supplied_data.get('schema')==4 and os.getenv('RV_REFRESH_SOURCES')!='1': return supplied_data,'uploaded-index'
     if cache.is_file():
         with gzip.open(cache,'rt',encoding='utf-8') as f: data=json.load(f)
-        if data.get('archive_sha256')==EXPECTED or time.time()-cache.stat().st_mtime<7*86400: return data,'cached-source'
+        if data.get('schema')==4 and os.getenv('RV_REFRESH_SOURCES')!='1' and time.time()-cache.stat().st_mtime<7*86400: return data,'cached-source'
     else: data=None
     archive=cache.with_suffix('.zip')
     archive.parent.mkdir(parents=True,exist_ok=True)
@@ -77,7 +77,7 @@ def load_index():
         archive.unlink(missing_ok=True)
 
 def apply_index(out,merged,platforms,base_title,norm,write_json,is_rom_hack):
-    report={'launchbox_source':None,'launchbox_archive_matches_upload':False,'launchbox_matches':0,'launchbox_added_titles':0,'launchbox_image_references':0,'launchbox_platforms':0,'launchbox_unmapped_platforms':0,'launchbox_source_games':0}
+    report={'launchbox_source':None,'launchbox_archive_matches_upload':False,'launchbox_matches':0,'launchbox_added_titles':0,'launchbox_image_references':0,'launchbox_platforms':0,'launchbox_unmapped_platforms':0,'launchbox_unmapped_names':[],'launchbox_source_games':0}
     try: data,source=load_index()
     except Exception as e:
         report['launchbox_error']=str(e); print(report['launchbox_error']); return {},{},report
@@ -99,6 +99,7 @@ def apply_index(out,merged,platforms,base_title,norm,write_json,is_rom_hack):
             sys=next(iter(match)) if len(match)==1 else None
         if not sys:
             report['launchbox_unmapped_platforms']+=1
+            report['launchbox_unmapped_names'].append(platform)
             continue
         per[sys].extend(rows)
         platform_to_system[platform]=sys

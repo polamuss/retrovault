@@ -1,5 +1,5 @@
 """Index GameTDB title/serial references, without mirroring image files."""
-import hashlib, json, re, time, urllib.request
+import hashlib, json, os, re, time, urllib.request
 from collections import defaultdict
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
@@ -16,7 +16,7 @@ def title_rows(db):
     file=CACHE/(db+'.json')
     try: old=json.loads(file.read_text(encoding='utf-8'))
     except (OSError,ValueError): old=None
-    if old and time.time()-file.stat().st_mtime<14*86400: return old
+    if old and os.getenv('RV_REFRESH_SOURCES')!='1' and time.time()-file.stat().st_mtime<14*86400: return old
     try:
         req=urllib.request.Request('https://www.gametdb.com/'+db+'.txt?LANG=EN',headers={'User-Agent':'RetroVault catalogue metadata index'})
         with urllib.request.urlopen(req,timeout=35) as r: raw=r.read(8*1024*1024+1)
@@ -44,7 +44,8 @@ def title_rows(db):
 def region(id,kind):
     if kind=='ps3': return {'E':'EN','U':'US','J':'JA','K':'KO','A':'ZH','H':'US'}.get(id[2:3],'EN')
     return {'E':'US','P':'EN','J':'JA','K':'KO','F':'FR','D':'DE','I':'IT','S':'ES','U':'AU','A':'EN','X':'EN','Y':'EN','Z':'EN'}.get(id[3:4],'EN')
-def index_gametdb(out,merged,base_title,write_json):
+def index_gametdb(out,merged,base_title,write_json,alias_maps=None):
+    alias_maps=alias_maps or {}
     output={}
     stats={'gametdb_platforms':0,'gametdb_matches':0,'gametdb_errors':[]}
     loaded={}
@@ -58,6 +59,8 @@ def index_gametdb(out,merged,base_title,write_json):
                 loaded[db]=[]
                 stats['gametdb_errors'].append(str(exc))
         pool=defaultdict(list)
+        aliases=alias_maps.get(system,{})
+        alias_pool=defaultdict(list)
         for id,title in loaded[db]:
             if db=='wiitdb':
                 if root.endswith('GameCube') and not id.startswith('G'): continue
@@ -65,10 +68,13 @@ def index_gametdb(out,merged,base_title,write_json):
             if db=='ps3tdb' and not re.fullmatch(r'[BN][A-Z]{3}\d{5}',id): continue
             if db=='dstdb' and len(id)!=4: continue
             key=base_title(title)
-            if key: pool[key].append(id)
+            if key:
+                pool[key].append(id)
+                alias_pool[aliases.get(key,key)].append(id)
         index={}
         for title in sorted(names):
-            ids=pool.get(base_title(title),[])
+            key=base_title(title)
+            ids=pool.get(key,[]) or alias_pool.get(aliases.get(key,key),[])
             if not ids: continue
             # Prefer the same region, then other documented editions of the exact normalized title.
             wanted='FR' if '(France' in title else 'EN' if '(Europe' in title else 'US' if '(USA' in title else 'JA' if '(Japan' in title else 'EN'

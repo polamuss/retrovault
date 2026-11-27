@@ -44,10 +44,22 @@ def load_rows():
         archive=tmp/'db.zip'
         archive.write_bytes(data)
         with zipfile.ZipFile(archive) as z:
-            files=[i for i in z.infolist() if i.filename.lower().endswith('.sqlite') and i.file_size<500_000_000]
-            if len(files)!=1: raise ValueError('base SQLite absente ou ambiguë')
+            files=[]
+            for info in z.infolist():
+                if info.is_dir() or info.file_size<100 or info.file_size>500_000_000: continue
+                with z.open(info) as member:
+                    if member.read(16)==b'SQLite format 3\x00': files.append(info)
             db=tmp/'db.sqlite'
-            db.write_bytes(z.read(files[0]))
+            import shutil
+            found=False
+            for info in files:
+                with z.open(info) as src,db.open('wb') as dst: shutil.copyfileobj(src,dst)
+                with sqlite3.connect('file:'+str(db)+'?mode=ro',uri=True) as conn:
+                    tables={row[0].lower() for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+                if {'roms','releases','systems'}.issubset(tables):
+                    found=True
+                    break
+            if not found: raise ValueError('base SQLite OpenVGDB compatible absente')
         with sqlite3.connect('file:'+str(db)+'?mode=ro',uri=True) as conn:
             rows=conn.execute('SELECT DISTINCT s.systemName, r.releaseTitleName, rom.romFileName, r.releaseCoverFront FROM ROMs rom JOIN RELEASES r USING (romID) JOIN SYSTEMS s USING (systemID) WHERE r.releaseCoverFront IS NOT NULL').fetchall()
         counts=Counter()
@@ -61,7 +73,8 @@ def load_rows():
             counts[system]+=1
         CACHE.write_text(json.dumps(result,ensure_ascii=False),encoding='utf-8')
         return result
-def index_openvgdb(out,merged,base_title,write_json):
+def index_openvgdb(out,merged,base_title,write_json,alias_maps=None):
+    alias_maps=alias_maps or {}
     stats={'openvgdb_source_rows':0,'openvgdb_matches':0,'openvgdb_platforms':0,'openvgdb_unmapped':[],'openvgdb_error':None}
     result={}
     try: rows=load_rows()
@@ -84,8 +97,12 @@ def index_openvgdb(out,merged,base_title,write_json):
         pool=pools.get(system) or pools.get(root)
         if not pool: continue
         index={}
+        aliases=alias_maps.get(system,{})
+        alias_pool=defaultdict(set)
+        for key,urls in pool.items(): alias_pool[aliases.get(key,key)].update(urls)
         for title in sorted(names):
-            hits=pool.get(base_title(title),set())
+            key=base_title(title)
+            hits=pool.get(key,set()) or alias_pool.get(aliases.get(key,key),set())
             if hits: index[title]=sorted(hits)[:3]
         if index:
             path='data/openvgdb/'+hashlib.sha256(system.encode()).hexdigest()[:16]+'.json'

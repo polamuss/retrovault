@@ -330,12 +330,13 @@ def main():
     paths={v['path'] for v in images.values()}
     media_report.update(image_references=len(images),unique_images=len(paths),deduplicated_images=len(images)-len(paths),image_bytes=sum((out/p).stat().st_size for p in paths))
     write_image_credits(out,images)
-    art,art_stats=index_games(out,merged,base_title,write_json) if args.fetch else ({},{})
-    gtdb,gtdb_stats=index_gametdb(out,merged,base_title,write_json) if args.fetch else ({},{})
+    alias_maps={sys:read_json(out/path) for sys,path in lb_groups.items()}
+    art,art_stats=index_games(out,merged,base_title,write_json,alias_maps) if args.fetch else ({},{})
+    gtdb,gtdb_stats=index_gametdb(out,merged,base_title,write_json,alias_maps) if args.fetch else ({},{})
     media_report.update(art_stats)
     media_report.update(lb_stats)
     media_report.update(gtdb_stats)
-    ovdb,ov_stats=index_openvgdb(out,merged,base_title,write_json) if args.fetch else ({},{})
+    ovdb,ov_stats=index_openvgdb(out,merged,base_title,write_json,alias_maps) if args.fetch else ({},{})
     media_report.update(ov_stats)
     media_report['rom_hacks_removed']=removed_hacks+lb_stats.get('launchbox_hacks_removed_from_catalog',0)
     covered=0

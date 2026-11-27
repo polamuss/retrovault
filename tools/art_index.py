@@ -48,7 +48,7 @@ def files_for(repo,branch):
     old=None
     try:
         old=json.loads(file.read_text(encoding='utf-8'))
-        if time.time()-file.stat().st_mtime<7*86400: return old
+        if os.getenv('RV_REFRESH_SOURCES')!='1' and time.time()-file.stat().st_mtime<7*86400: return old
     except (OSError,ValueError): pass
     try:
         base='https://api.github.com/repos/libretro-thumbnails/'+repo+'/git/trees/'
@@ -83,7 +83,8 @@ def files_for(repo,branch):
         print('Index Libretro indisponible:',repo,str(e))
         return None
 
-def index_games(out,merged,base_title,write_json):
+def index_games(out,merged,base_title,write_json,alias_maps=None):
+    alias_maps=alias_maps or {}
     result={}
     stats={'art_platforms':0,'art_matches':0,'art_exact':0,'art_variant':0,'art_screenshots':0,'art_errors':0}
     try: sources=module_map()
@@ -100,13 +101,20 @@ def index_games(out,merged,base_title,write_json):
         repo,branch=sources[source_system]
         names=files_for(repo,branch)
         if names is None: return system,False
+        aliases=alias_maps.get(system,{})
+        def group_key(n):
+            key=base_title(n)
+            return aliases.get(key,key)
         exact={}
         groups=defaultdict(list)
+        alias_groups=defaultdict(list)
         for priority,kind in enumerate(KINDS):
             for name in names[kind]:
                 exact.setdefault(name.casefold(),(priority,name))
                 base=base_title(name)
-                if base: groups[base].append((priority,name))
+                if base:
+                    groups[base].append((priority,name))
+                    alias_groups[group_key(name)].append((priority,name))
         matches={}
         counts=[0,0,0]
         for title in sorted(merged[system]):
@@ -114,7 +122,7 @@ def index_games(out,merged,base_title,write_json):
             hit=exact.get(clean.casefold())
             alternate=False
             if hit is None or hit[0]!=0:
-                pool=groups.get(base_title(clean),[])
+                pool=groups.get(base_title(clean),[]) or alias_groups.get(group_key(title),[])
                 if not pool and hit is None: continue
                 if hit is not None: pool=[hit,*pool]
                 # Same normalized title, not an unrelated search result.
